@@ -18,5 +18,11 @@ export const buscarCliente = (id) => req(`/api/clientes/${id}`);
 export const listarDocumentos = (id) => req(`/api/clientes/${id}/documentos`);
 export const gerarDocumento = (id, tipo) => req(`/api/clientes/${id}/gerar/${tipo}`, { method: 'POST' });
 
+export function anexarDocumento(id, arquivo) {
+  const form = new FormData();
+  form.append('arquivo', arquivo);
+  return req(`/api/clientes/${id}/anexar`, { method: 'POST', body: form });
+}
+
 // url_download vem relativa do backend (/api/documentos/:id/download)
 export const urlDownload = (doc) => API_URL + doc.url_download;

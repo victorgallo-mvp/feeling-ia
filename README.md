@@ -39,4 +39,5 @@ npm run dev               # http://localhost:5173
 - [x] Passo 1 — backend: clientes, gerar relatório, documentos, download
 - [x] Passo 2 — frontend: lista → cliente → Gerar Relatório → download
 - [x] Passo 3 — fim-a-fim com cliente real (Alemão Performance) + webhook real `relatorio-semanal`
-- [ ] Passo 4 — pesquisa, briefing (basta configurar o webhook e ligar `ativo` em `Cliente.jsx`) e upload (`rotas/anexar.js` está stubado)
+- [x] Passo 4 — pesquisa, briefing e upload (PDF, DOCX, TXT até 25 MB; só alimenta o cérebro, não entra na lista)
+- [ ] Deploy — Railway (backend) + Vercel (frontend)
