@@ -41,7 +41,7 @@ npm run dev               # http://localhost:5173
 - [x] Passo 3 — fim-a-fim com cliente real (Alemão Performance) + webhook real `relatorio-semanal`
 - [x] Passo 4 — pesquisa, briefing e upload (PDF, DOCX, TXT até 25 MB; só alimenta o cérebro, não entra na lista)
 - [x] Cadastro pelo painel — criar/editar cliente (`POST /api/clientes`, `PUT /api/clientes/:id`) e coluna `clientes.perfil`
-- [x] Presença digital — campos `instagram`, `site`, `google_ads_id` + documento `analise` (botão fica "em breve" até existir `N8N_WEBHOOK_ANALISE`)
+- [x] Presença digital — campos `instagram`, `site`, `google_ads_id` + documento `analise` (webhook `N8N_WEBHOOK_PRESENCA`; sem ele o botão fica "em breve")
 - [x] Deploy — Railway (backend) + Vercel (frontend)
 
 ## Onde cada informação do cliente mora

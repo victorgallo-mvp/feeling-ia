@@ -7,7 +7,7 @@ const TIPOS = [
   { tipo: 'relatorio', rotulo: 'Relatório', acao: 'Gerar Relatório' },
   { tipo: 'pesquisa', rotulo: 'Pesquisa de Mercado', acao: 'Gerar Pesquisa de Mercado' },
   { tipo: 'briefing', rotulo: 'Briefing', acao: 'Gerar Briefing' },
-  { tipo: 'analise', rotulo: 'Análise de Presença Digital', acao: 'Gerar Análise Digital' },
+  { tipo: 'analise', rotulo: 'Análise de Presença Digital', acao: 'Analisar Presença Digital' },
 ];
 const ROTULOS = Object.fromEntries(TIPOS.map((t) => [t.tipo, t.rotulo]));
 
@@ -101,7 +101,6 @@ export default function Cliente() {
   const bloqueio = (tipo) => {
     if (ligados && ligados[tipo] === false) return 'em breve';
     if (tipo === 'relatorio' && !cliente.conta_id) return 'falta ID da conta';
-    if (tipo === 'analise' && !cliente.instagram && !cliente.site) return 'falta Instagram ou site';
     return null;
   };
   const faltando = [
@@ -137,6 +136,9 @@ export default function Cliente() {
             </button>
           ))}
         </div>
+        {!cliente.cidade && !cliente.instagram && !cliente.site && (
+          <p className="aviso">Sem cidade, Instagram ou site no cadastro, a análise de presença digital busca só pelo nome e pode achar um homônimo.</p>
+        )}
         {gerando && <p className="aviso" role="status">A IA está montando o documento. Isso pode levar até 2 minutos — não feche a página.</p>}
         {erroGeracao && <p className="aviso aviso-erro" role="alert">{erroGeracao}</p>}
       </section>

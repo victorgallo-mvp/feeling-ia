@@ -74,7 +74,7 @@ export default function FormCliente({ inicial, rotuloSalvar, aoSalvar, aoCancela
         </div>
         <fieldset className="form-grupo form-campo-largo">
           <legend>Presença digital</legend>
-          <p className="form-ajuda">É o que a IA analisa no documento "Análise de Presença Digital". Instagram ou site já bastam pra gerar.</p>
+          <p className="form-ajuda">Ponto de partida da "Análise de Presença Digital". Sem eles a IA procura pelo nome + cidade e pode errar o perfil.</p>
           <div className="form-grade form-grade-3">
             <div className="form-campo">
               <label htmlFor="campo-instagram">Instagram</label>

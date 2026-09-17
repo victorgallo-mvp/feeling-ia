@@ -20,8 +20,6 @@ router.post('/clientes/:id/gerar/:tipo', async (req, res) => {
     );
     if (!rows.length) return res.status(404).json({ erro: 'cliente não encontrado' });
     const cliente = rows[0];
-    if (tipo === 'analise' && !cliente.instagram && !cliente.site)
-      return res.status(400).json({ erro: 'preencha o Instagram ou o site do cliente antes de gerar a análise' });
 
     // 1. n8n faz o trabalho pesado e devolve markdown
     const markdown = await gerarViaN8n(tipo, {

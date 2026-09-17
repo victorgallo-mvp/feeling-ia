@@ -6,7 +6,7 @@ const WEBHOOKS = {
   relatorio: process.env.N8N_WEBHOOK_RELATORIO,
   pesquisa:  process.env.N8N_WEBHOOK_PESQUISA,
   briefing:  process.env.N8N_WEBHOOK_BRIEFING,
-  analise:   process.env.N8N_WEBHOOK_ANALISE,
+  analise:   process.env.N8N_WEBHOOK_PRESENCA, // Análise de Presença Digital
 };
 
 // Quais tipos têm workflow ligado — o painel usa pra mostrar "em breve" nos que faltam.
