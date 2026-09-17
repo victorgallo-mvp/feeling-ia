@@ -1,0 +1,4 @@
+.DS_Store
+.env
+# o brief em PDF é o mesmo conteúdo de cockpit-feeling-starter/PROMPT_CLAUDE_CODE.md
+*.pdf
