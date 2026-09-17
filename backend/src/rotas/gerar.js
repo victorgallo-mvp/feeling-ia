@@ -1,26 +1,32 @@
-// src/rotas/gerar.js  (exemplo do passo 1 — só relatório)
+// src/rotas/gerar.js
 const express = require('express');
 const router = express.Router();
 const { pool } = require('../servicos/db');
-const { gerarViaN8n } = require('../servicos/n8n');
+const { gerarViaN8n, tiposConfigurados } = require('../servicos/n8n');
 const { markdownParaPdf } = require('../servicos/pdf');
 const { salvarPdf } = require('../servicos/storage');
 
+router.get('/tipos', (req, res) => res.json(tiposConfigurados()));
+
 router.post('/clientes/:id/gerar/:tipo', async (req, res) => {
   const { id, tipo } = req.params;
-  if (!['relatorio', 'pesquisa', 'briefing'].includes(tipo))
-    return res.status(400).json({ erro: 'tipo inválido' });
+  const configurados = tiposConfigurados();
+  if (!(tipo in configurados)) return res.status(400).json({ erro: 'tipo inválido' });
+  if (!configurados[tipo]) return res.status(503).json({ erro: 'esse documento ainda não foi ligado no n8n' });
 
   try {
     const { rows } = await pool.query(
-      'SELECT id, nome, conta_id FROM clientes WHERE id = $1', [id]
+      'SELECT id, nome, conta_id, instagram, site, google_ads_id FROM clientes WHERE id = $1', [id]
     );
     if (!rows.length) return res.status(404).json({ erro: 'cliente não encontrado' });
     const cliente = rows[0];
+    if (tipo === 'analise' && !cliente.instagram && !cliente.site)
+      return res.status(400).json({ erro: 'preencha o Instagram ou o site do cliente antes de gerar a análise' });
 
     // 1. n8n faz o trabalho pesado e devolve markdown
     const markdown = await gerarViaN8n(tipo, {
-      conta_id: cliente.conta_id, cliente_nome: cliente.nome,
+      conta_id: cliente.conta_id, cliente_nome: cliente.nome, cliente_id: cliente.id,
+      instagram: cliente.instagram, site: cliente.site, google_ads_id: cliente.google_ads_id,
     });
 
     // 2. markdown -> PDF (visual padrão)

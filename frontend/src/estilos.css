@@ -150,9 +150,19 @@ code {
 .ficha dd { margin: 3px 0 0; overflow-wrap: anywhere; }
 .ficha-perfil { white-space: pre-wrap; }
 
+/* Motivo do bloqueio dentro do botão desabilitado */
+.etiqueta {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;
+  padding: 2px 6px; border-radius: 4px; background: rgba(18, 32, 58, 0.08); color: var(--texto-suave);
+}
+
 /* Formulário de cliente */
 .form-grade { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 20px; }
 .form-campo-largo { grid-column: 1 / -1; }
+.form-grade-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 12px; }
+.form-grupo { margin: 0; padding: 14px 16px 16px; border: 1px solid var(--linha); border-radius: 8px; min-width: 0; }
+.form-grupo legend { padding: 0 6px; font-size: 13px; font-weight: 700; color: var(--marinho); }
+.form-grupo .form-ajuda { margin-top: 0; }
 .form-campo label { display: block; font-size: 13px; font-weight: 700; color: var(--marinho); margin-bottom: 5px; }
 .form-rotulo-linha { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .form-campo input, .form-campo textarea {
@@ -168,7 +178,7 @@ code {
 .form-acoes { margin-top: 20px; }
 
 @media (max-width: 640px) {
-  .ficha, .form-grade { grid-template-columns: 1fr; }
+  .ficha, .form-grade, .form-grade-3 { grid-template-columns: 1fr; }
 }
 
 /* Documentos */

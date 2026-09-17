@@ -12,7 +12,7 @@ Verba mensal de mídia:
 Tom de voz:
 Observações:`;
 
-const VAZIO = { nome: '', setor: '', cidade: '', conta_id: '', perfil: '' };
+const VAZIO = { nome: '', setor: '', cidade: '', conta_id: '', perfil: '', instagram: '', site: '', google_ads_id: '' };
 
 // Formulário de criar/editar cliente. `aoSalvar(dados)` deve devolver uma Promise.
 export default function FormCliente({ inicial, rotuloSalvar, aoSalvar, aoCancelar }) {
@@ -69,9 +69,27 @@ export default function FormCliente({ inicial, rotuloSalvar, aoSalvar, aoCancela
           <label htmlFor="campo-conta_id">ID da conta no Sentinel</label>
           <input {...campo('conta_id')} placeholder="ex.: alemao-performance" autoComplete="off" spellCheck="false" />
           <p className="form-ajuda">
-            Precisa ser idêntico ao <code>conta_id</code> do Sentinel. Se estiver errado, o relatório sai sem números — e sem avisar. Sem ele, só pesquisa e briefing funcionam.
+            Precisa ser idêntico ao <code>conta_id</code> do Sentinel. Se estiver errado, o relatório sai sem números — e sem avisar. Sem ele, só o relatório fica bloqueado.
           </p>
         </div>
+        <fieldset className="form-grupo form-campo-largo">
+          <legend>Presença digital</legend>
+          <p className="form-ajuda">É o que a IA analisa no documento "Análise de Presença Digital". Instagram ou site já bastam pra gerar.</p>
+          <div className="form-grade form-grade-3">
+            <div className="form-campo">
+              <label htmlFor="campo-instagram">Instagram</label>
+              <input {...campo('instagram')} placeholder="@perfil ou link" autoComplete="off" spellCheck="false" />
+            </div>
+            <div className="form-campo">
+              <label htmlFor="campo-site">Site</label>
+              <input {...campo('site')} placeholder="www.cliente.com.br" autoComplete="off" spellCheck="false" inputMode="url" />
+            </div>
+            <div className="form-campo">
+              <label htmlFor="campo-google_ads_id">ID do Google Ads</label>
+              <input {...campo('google_ads_id')} placeholder="123-456-7890" autoComplete="off" inputMode="numeric" />
+            </div>
+          </div>
+        </fieldset>
         <div className="form-campo form-campo-largo">
           <div className="form-rotulo-linha">
             <label htmlFor="campo-perfil">Perfil do cliente</label>

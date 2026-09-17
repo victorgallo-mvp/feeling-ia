@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import FormCliente from './FormCliente.jsx';
-import { anexarDocumento, atualizarCliente, buscarCliente, gerarDocumento, listarDocumentos, urlDownload } from '../api.js';
+import { anexarDocumento, atualizarCliente, buscarCliente, gerarDocumento, listarDocumentos, listarTipos, urlDownload } from '../api.js';
 
 const TIPOS = [
   { tipo: 'relatorio', rotulo: 'Relatório', acao: 'Gerar Relatório' },
   { tipo: 'pesquisa', rotulo: 'Pesquisa de Mercado', acao: 'Gerar Pesquisa de Mercado' },
   { tipo: 'briefing', rotulo: 'Briefing', acao: 'Gerar Briefing' },
+  { tipo: 'analise', rotulo: 'Análise de Presença Digital', acao: 'Gerar Análise Digital' },
 ];
 const ROTULOS = Object.fromEntries(TIPOS.map((t) => [t.tipo, t.rotulo]));
 
@@ -27,6 +28,7 @@ export default function Cliente() {
   const [anexo, setAnexo] = useState({ estado: 'parado', mensagem: '' }); // parado | enviando | ok | erro
   const [arrastando, setArrastando] = useState(false);
   const [editando, setEditando] = useState(false);
+  const [ligados, setLigados] = useState(null); // { tipo: bool } — quais documentos têm workflow no n8n
   const inputArquivo = useRef(null);
 
   useEffect(() => {
@@ -38,6 +40,10 @@ export default function Cliente() {
       .then(([c, docs]) => { setCliente(c); setDocumentos(docs); })
       .catch((e) => setErro(e.message));
   }, [id]);
+
+  useEffect(() => {
+    listarTipos().then(setLigados).catch(() => setLigados(null)); // sem resposta, não bloqueia nada
+  }, []);
 
   async function gerar(tipo) {
     setGerando(tipo);
@@ -91,11 +97,19 @@ export default function Cliente() {
   if (!cliente) return <p className="vazio">Carregando…</p>;
 
   const enviando = anexo.estado === 'enviando';
+  // motivo que impede gerar cada tipo (null = pode gerar)
+  const bloqueio = (tipo) => {
+    if (ligados && ligados[tipo] === false) return 'em breve';
+    if (tipo === 'relatorio' && !cliente.conta_id) return 'falta ID da conta';
+    if (tipo === 'analise' && !cliente.instagram && !cliente.site) return 'falta Instagram ou site';
+    return null;
+  };
   const faltando = [
     !cliente.conta_id && 'ID da conta',
     !cliente.setor && 'setor',
     !cliente.cidade && 'cidade',
     !cliente.perfil && 'perfil',
+    !cliente.instagram && !cliente.site && 'Instagram ou site',
   ].filter(Boolean);
 
   return (
@@ -115,14 +129,14 @@ export default function Cliente() {
             <button
               key={t.tipo}
               className="botao"
-              disabled={gerando !== null || (t.tipo === 'relatorio' && !cliente.conta_id)}
+              disabled={gerando !== null || bloqueio(t.tipo) !== null}
               onClick={() => gerar(t.tipo)}
             >
               {gerando === t.tipo ? <><span className="girando" aria-hidden="true" /> Gerando…</> : t.acao}
+              {bloqueio(t.tipo) && <span className="etiqueta">{bloqueio(t.tipo)}</span>}
             </button>
           ))}
         </div>
-        {!cliente.conta_id && <p className="aviso">O relatório puxa as métricas pelo ID da conta no Sentinel. Preencha em "Informações do cliente" para liberar.</p>}
         {gerando && <p className="aviso" role="status">A IA está montando o documento. Isso pode levar até 2 minutos — não feche a página.</p>}
         {erroGeracao && <p className="aviso aviso-erro" role="alert">{erroGeracao}</p>}
       </section>
@@ -159,6 +173,9 @@ export default function Cliente() {
               <div><dt>Setor</dt><dd>{cliente.setor || '—'}</dd></div>
               <div><dt>Cidade</dt><dd>{cliente.cidade || '—'}</dd></div>
               <div><dt>ID da conta no Sentinel</dt><dd>{cliente.conta_id ? <code>{cliente.conta_id}</code> : '—'}</dd></div>
+              <div><dt>Instagram</dt><dd>{cliente.instagram ? <a href={`https://instagram.com/${cliente.instagram}`} target="_blank" rel="noreferrer">@{cliente.instagram}</a> : '—'}</dd></div>
+              <div><dt>Site</dt><dd>{cliente.site ? <a href={cliente.site} target="_blank" rel="noreferrer">{cliente.site.replace(/^https?:\/\//, '')}</a> : '—'}</dd></div>
+              <div><dt>ID do Google Ads</dt><dd>{cliente.google_ads_id ? <code>{cliente.google_ads_id}</code> : '—'}</dd></div>
               <div className="ficha-larga"><dt>Perfil</dt><dd className="ficha-perfil">{cliente.perfil || '—'}</dd></div>
             </dl>
             {faltando.length > 0 && (

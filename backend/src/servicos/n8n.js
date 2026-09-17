@@ -6,15 +6,21 @@ const WEBHOOKS = {
   relatorio: process.env.N8N_WEBHOOK_RELATORIO,
   pesquisa:  process.env.N8N_WEBHOOK_PESQUISA,
   briefing:  process.env.N8N_WEBHOOK_BRIEFING,
+  analise:   process.env.N8N_WEBHOOK_ANALISE,
 };
 
-async function gerarViaN8n(tipo, { conta_id, cliente_nome }) {
+// Quais tipos têm workflow ligado — o painel usa pra mostrar "em breve" nos que faltam.
+const tiposConfigurados = () =>
+  Object.fromEntries(Object.entries(WEBHOOKS).map(([tipo, url]) => [tipo, Boolean(url)]));
+
+// `dados` vai inteiro no corpo: sempre { conta_id, cliente_nome }, mais o que o tipo precisar.
+async function gerarViaN8n(tipo, dados) {
   const url = WEBHOOKS[tipo];
   if (!url) throw new Error(`Webhook não configurado para tipo: ${tipo}`);
 
   const resp = await axios.post(
     url,
-    { conta_id, cliente_nome },
+    dados,
     { timeout: 120000, headers: { 'Content-Type': 'application/json' } }
   );
 
@@ -36,4 +42,4 @@ async function anexarViaN8n(fileBuffer, filename, { conta_id, cliente_nome }) {
   return { ok: true };
 }
 
-module.exports = { gerarViaN8n, anexarViaN8n };
+module.exports = { gerarViaN8n, anexarViaN8n, tiposConfigurados };

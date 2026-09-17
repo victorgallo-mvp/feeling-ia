@@ -35,13 +35,16 @@ async function migrar() {
     ALTER TABLE clientes ADD COLUMN IF NOT EXISTS conta_id TEXT;
     ALTER TABLE clientes ADD COLUMN IF NOT EXISTS cidade TEXT;
     ALTER TABLE clientes ADD COLUMN IF NOT EXISTS perfil TEXT;
+    ALTER TABLE clientes ADD COLUMN IF NOT EXISTS instagram TEXT;      -- handle, sem @
+    ALTER TABLE clientes ADD COLUMN IF NOT EXISTS site TEXT;
+    ALTER TABLE clientes ADD COLUMN IF NOT EXISTS google_ads_id TEXT;  -- 123-456-7890
   `);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS documentos_gerados (
       id SERIAL PRIMARY KEY,
       cliente_id INT,
       cliente_nome TEXT,
-      tipo TEXT,                 -- relatorio | pesquisa | briefing
+      tipo TEXT,                 -- relatorio | pesquisa | briefing | analise
       caminho TEXT,              -- caminho do PDF no storage
       criado_em TIMESTAMP DEFAULT now()
     );

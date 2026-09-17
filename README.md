@@ -41,6 +41,7 @@ npm run dev               # http://localhost:5173
 - [x] Passo 3 — fim-a-fim com cliente real (Alemão Performance) + webhook real `relatorio-semanal`
 - [x] Passo 4 — pesquisa, briefing e upload (PDF, DOCX, TXT até 25 MB; só alimenta o cérebro, não entra na lista)
 - [x] Cadastro pelo painel — criar/editar cliente (`POST /api/clientes`, `PUT /api/clientes/:id`) e coluna `clientes.perfil`
+- [x] Presença digital — campos `instagram`, `site`, `google_ads_id` + documento `analise` (botão fica "em breve" até existir `N8N_WEBHOOK_ANALISE`)
 - [x] Deploy — Railway (backend) + Vercel (frontend)
 
 ## Onde cada informação do cliente mora
@@ -48,7 +49,19 @@ npm run dev               # http://localhost:5173
 | Informação | Onde | Quem lê |
 |---|---|---|
 | nome, setor, cidade, `conta_id` | colunas de `clientes` | n8n por SQL (valor exato) |
+| `instagram` (handle sem @), `site` (com https://), `google_ads_id` (123-456-7890) | colunas de `clientes` | vão no corpo de todo webhook de geração |
 | perfil (público, diferenciais, ticket…) | `clientes.perfil` (texto, editar substitui) | n8n injeta direto no prompt de pesquisa/briefing |
 | documentos longos (PDF/DOCX/TXT) | tabela `cerebro` via upload | n8n por busca semântica (RAG) |
 
 `conta_id` tem que ser idêntico ao do Sentinel (`metricas_serie_temporal.conta_id`): valor errado não dá erro, o relatório só sai sem números.
+
+## Contrato dos webhooks de geração
+
+`POST` com JSON; o workflow responde `{ "markdown": "..." }` em até 120s.
+
+```json
+{ "conta_id": "alemao-performance", "cliente_nome": "Alemão Performance", "cliente_id": 1,
+  "instagram": "alemaoperformance", "site": "https://alemaoperformance.com.br", "google_ads_id": null }
+```
+
+Campos não preenchidos chegam como `null`. `GET /api/tipos` diz quais documentos têm webhook configurado.

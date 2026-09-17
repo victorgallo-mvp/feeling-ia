@@ -13,6 +13,7 @@ async function req(caminho, opcoes) {
   return corpo;
 }
 
+export const listarTipos = () => req('/api/tipos');
 export const listarClientes = () => req('/api/clientes');
 export const buscarCliente = (id) => req(`/api/clientes/${id}`);
 const comJson = (method, dados) => ({
