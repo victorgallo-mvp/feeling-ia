@@ -26,17 +26,20 @@ export default function ListaClientes() {
           <h1>Clientes</h1>
           <p className="sub">{clientes.length} {clientes.length === 1 ? 'cliente' : 'clientes'} no cérebro</p>
         </div>
-        <input
-          className="busca"
-          type="search"
-          placeholder="Buscar por nome, setor ou cidade"
-          value={busca}
-          onChange={(e) => setBusca(e.target.value)}
-        />
+        <div className="cabecalho-acoes">
+          <input
+            className="busca"
+            type="search"
+            placeholder="Buscar por nome, setor ou cidade"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+          />
+          <Link to="/clientes/novo" className="botao">Novo cliente</Link>
+        </div>
       </div>
 
       {visiveis.length === 0 ? (
-        <p className="vazio">{clientes.length ? 'Nenhum cliente bate com a busca.' : 'Nenhum cliente cadastrado ainda.'}</p>
+        <p className="vazio">{clientes.length ? 'Nenhum cliente bate com a busca.' : 'Nenhum cliente cadastrado ainda. Comece por "Novo cliente".'}</p>
       ) : (
         <ul className="grade-clientes">
           {visiveis.map((c) => (

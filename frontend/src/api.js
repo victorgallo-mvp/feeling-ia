@@ -15,6 +15,11 @@ async function req(caminho, opcoes) {
 
 export const listarClientes = () => req('/api/clientes');
 export const buscarCliente = (id) => req(`/api/clientes/${id}`);
+const comJson = (method, dados) => ({
+  method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dados),
+});
+export const criarCliente = (dados) => req('/api/clientes', comJson('POST', dados));
+export const atualizarCliente = (id, dados) => req(`/api/clientes/${id}`, comJson('PUT', dados));
 export const listarDocumentos = (id) => req(`/api/clientes/${id}/documentos`);
 export const gerarDocumento = (id, tipo) => req(`/api/clientes/${id}/gerar/${tipo}`, { method: 'POST' });
 

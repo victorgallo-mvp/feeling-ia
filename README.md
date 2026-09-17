@@ -40,4 +40,15 @@ npm run dev               # http://localhost:5173
 - [x] Passo 2 — frontend: lista → cliente → Gerar Relatório → download
 - [x] Passo 3 — fim-a-fim com cliente real (Alemão Performance) + webhook real `relatorio-semanal`
 - [x] Passo 4 — pesquisa, briefing e upload (PDF, DOCX, TXT até 25 MB; só alimenta o cérebro, não entra na lista)
-- [ ] Deploy — Railway (backend) + Vercel (frontend)
+- [x] Cadastro pelo painel — criar/editar cliente (`POST /api/clientes`, `PUT /api/clientes/:id`) e coluna `clientes.perfil`
+- [x] Deploy — Railway (backend) + Vercel (frontend)
+
+## Onde cada informação do cliente mora
+
+| Informação | Onde | Quem lê |
+|---|---|---|
+| nome, setor, cidade, `conta_id` | colunas de `clientes` | n8n por SQL (valor exato) |
+| perfil (público, diferenciais, ticket…) | `clientes.perfil` (texto, editar substitui) | n8n injeta direto no prompt de pesquisa/briefing |
+| documentos longos (PDF/DOCX/TXT) | tabela `cerebro` via upload | n8n por busca semântica (RAG) |
+
+`conta_id` tem que ser idêntico ao do Sentinel (`metricas_serie_temporal.conta_id`): valor errado não dá erro, o relatório só sai sem números.

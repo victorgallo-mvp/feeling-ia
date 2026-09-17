@@ -28,8 +28,14 @@ pool.query = async (...args) => {
   }
 };
 
-// Única migração do projeto.
+// Migrações do projeto (idempotentes, rodam no boot).
 async function migrar() {
+  // Colunas de `clientes` que o cockpit edita; `perfil` é o contexto livre que o n8n injeta no prompt.
+  await pool.query(`
+    ALTER TABLE clientes ADD COLUMN IF NOT EXISTS conta_id TEXT;
+    ALTER TABLE clientes ADD COLUMN IF NOT EXISTS cidade TEXT;
+    ALTER TABLE clientes ADD COLUMN IF NOT EXISTS perfil TEXT;
+  `);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS documentos_gerados (
       id SERIAL PRIMARY KEY,

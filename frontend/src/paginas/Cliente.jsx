@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { anexarDocumento, buscarCliente, gerarDocumento, listarDocumentos, urlDownload } from '../api.js';
+import FormCliente from './FormCliente.jsx';
+import { anexarDocumento, atualizarCliente, buscarCliente, gerarDocumento, listarDocumentos, urlDownload } from '../api.js';
 
 const TIPOS = [
   { tipo: 'relatorio', rotulo: 'Relatório', acao: 'Gerar Relatório' },
@@ -25,12 +26,14 @@ export default function Cliente() {
   const [novoId, setNovoId] = useState(null);
   const [anexo, setAnexo] = useState({ estado: 'parado', mensagem: '' }); // parado | enviando | ok | erro
   const [arrastando, setArrastando] = useState(false);
+  const [editando, setEditando] = useState(false);
   const inputArquivo = useRef(null);
 
   useEffect(() => {
     setCliente(null);
     setErro('');
     setAnexo({ estado: 'parado', mensagem: '' });
+    setEditando(false);
     Promise.all([buscarCliente(id), listarDocumentos(id)])
       .then(([c, docs]) => { setCliente(c); setDocumentos(docs); })
       .catch((e) => setErro(e.message));
@@ -68,6 +71,11 @@ export default function Cliente() {
     }
   }
 
+  async function salvarCliente(dados) {
+    setCliente(await atualizarCliente(id, dados));
+    setEditando(false);
+  }
+
   function soltar(e) {
     e.preventDefault();
     setArrastando(false);
@@ -83,6 +91,12 @@ export default function Cliente() {
   if (!cliente) return <p className="vazio">Carregando…</p>;
 
   const enviando = anexo.estado === 'enviando';
+  const faltando = [
+    !cliente.conta_id && 'ID da conta',
+    !cliente.setor && 'setor',
+    !cliente.cidade && 'cidade',
+    !cliente.perfil && 'perfil',
+  ].filter(Boolean);
 
   return (
     <>
@@ -98,13 +112,60 @@ export default function Cliente() {
         <h2>Gerar documento</h2>
         <div className="acoes">
           {TIPOS.map((t) => (
-            <button key={t.tipo} className="botao" disabled={gerando !== null} onClick={() => gerar(t.tipo)}>
+            <button
+              key={t.tipo}
+              className="botao"
+              disabled={gerando !== null || (t.tipo === 'relatorio' && !cliente.conta_id)}
+              onClick={() => gerar(t.tipo)}
+            >
               {gerando === t.tipo ? <><span className="girando" aria-hidden="true" /> Gerando…</> : t.acao}
             </button>
           ))}
         </div>
+        {!cliente.conta_id && <p className="aviso">O relatório puxa as métricas pelo ID da conta no Sentinel. Preencha em "Informações do cliente" para liberar.</p>}
         {gerando && <p className="aviso" role="status">A IA está montando o documento. Isso pode levar até 2 minutos — não feche a página.</p>}
         {erroGeracao && <p className="aviso aviso-erro" role="alert">{erroGeracao}</p>}
+      </section>
+
+      <section className="bloco">
+        <h2>Documentos gerados</h2>
+        {documentos.length === 0 ? (
+          <p className="vazio">Nenhum documento ainda. Gere o primeiro acima.</p>
+        ) : (
+          <ul className="lista-docs">
+            {documentos.map((d) => (
+              <li key={d.id} className={d.id === novoId ? 'doc doc-novo' : 'doc'}>
+                <div>
+                  <span className="doc-tipo">{ROTULOS[d.tipo] || d.tipo}</span>
+                  <span className="doc-data">{formatarData(d.criado_em)}</span>
+                </div>
+                <a className="botao botao-secundario" href={urlDownload(d)}>Baixar PDF</a>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="bloco">
+        <div className="bloco-topo">
+          <h2>Informações do cliente</h2>
+          {!editando && <button type="button" className="link" onClick={() => setEditando(true)}>Editar</button>}
+        </div>
+        {editando ? (
+          <FormCliente inicial={cliente} rotuloSalvar="Salvar" aoSalvar={salvarCliente} aoCancelar={() => setEditando(false)} />
+        ) : (
+          <>
+            <dl className="ficha">
+              <div><dt>Setor</dt><dd>{cliente.setor || '—'}</dd></div>
+              <div><dt>Cidade</dt><dd>{cliente.cidade || '—'}</dd></div>
+              <div><dt>ID da conta no Sentinel</dt><dd>{cliente.conta_id ? <code>{cliente.conta_id}</code> : '—'}</dd></div>
+              <div className="ficha-larga"><dt>Perfil</dt><dd className="ficha-perfil">{cliente.perfil || '—'}</dd></div>
+            </dl>
+            {faltando.length > 0 && (
+              <p className="aviso">Falta preencher: {faltando.join(', ')}. Quanto mais completo, menos "[a confirmar com o cliente]" nos documentos.</p>
+            )}
+          </>
+        )}
       </section>
 
       <section className="bloco">
@@ -131,25 +192,6 @@ export default function Cliente() {
           <p className={`aviso${anexo.estado === 'erro' ? ' aviso-erro' : ''}`} role={anexo.estado === 'erro' ? 'alert' : 'status'}>
             {anexo.mensagem}
           </p>
-        )}
-      </section>
-
-      <section className="bloco">
-        <h2>Documentos gerados</h2>
-        {documentos.length === 0 ? (
-          <p className="vazio">Nenhum documento ainda. Gere o primeiro acima.</p>
-        ) : (
-          <ul className="lista-docs">
-            {documentos.map((d) => (
-              <li key={d.id} className={d.id === novoId ? 'doc doc-novo' : 'doc'}>
-                <div>
-                  <span className="doc-tipo">{ROTULOS[d.tipo] || d.tipo}</span>
-                  <span className="doc-data">{formatarData(d.criado_em)}</span>
-                </div>
-                <a className="botao botao-secundario" href={urlDownload(d)}>Baixar PDF</a>
-              </li>
-            ))}
-          </ul>
         )}
       </section>
     </>

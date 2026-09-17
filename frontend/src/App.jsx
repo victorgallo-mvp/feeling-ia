@@ -1,6 +1,7 @@
 import { Link, Route, Routes } from 'react-router-dom';
 import ListaClientes from './paginas/ListaClientes.jsx';
 import Cliente from './paginas/Cliente.jsx';
+import NovoCliente from './paginas/NovoCliente.jsx';
 
 export default function App() {
   return (
@@ -14,6 +15,7 @@ export default function App() {
       <main className="conteudo">
         <Routes>
           <Route path="/" element={<ListaClientes />} />
+          <Route path="/clientes/novo" element={<NovoCliente />} />
           <Route path="/clientes/:id" element={<Cliente />} />
           <Route path="*" element={<p className="vazio">Página não encontrada. <Link to="/">Voltar aos clientes</Link></p>} />
         </Routes>

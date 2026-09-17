@@ -19,6 +19,14 @@ app.use('/api', require('./rotas/anexar'));
 
 app.use((req, res) => res.status(404).json({ erro: 'rota não encontrada' }));
 
+// Corpo JSON malformado ou grande demais (erros do express.json) — responde no formato da API.
+app.use((err, req, res, next) => {
+  if (err.type === 'entity.too.large') return res.status(413).json({ erro: 'conteúdo grande demais' });
+  if (err.type === 'entity.parse.failed') return res.status(400).json({ erro: 'JSON inválido' });
+  console.error(err);
+  res.status(500).json({ erro: 'erro interno' });
+});
+
 const PORT = process.env.PORT || 3000;
 
 migrar()
