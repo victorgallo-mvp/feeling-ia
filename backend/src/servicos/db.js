@@ -15,6 +15,19 @@ const pool = new Pool({
   ssl: process.env.PGSSL === 'true' ? { rejectUnauthorized: false } : undefined,
 });
 
+// Falha de conexão chega como AggregateError com message vazia (uma tentativa por IP);
+// sem isto a API responderia { erro: "" }.
+const consultar = pool.query.bind(pool);
+pool.query = async (...args) => {
+  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL não definida no servidor');
+  try {
+    return await consultar(...args);
+  } catch (e) {
+    if (!e.message && e.errors?.length) e.message = 'sem conexão com o banco: ' + e.errors.map((x) => x.message).join('; ');
+    throw e;
+  }
+};
+
 // Única migração do projeto.
 async function migrar() {
   await pool.query(`
