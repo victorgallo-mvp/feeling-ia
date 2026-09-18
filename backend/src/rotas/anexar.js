@@ -3,6 +3,7 @@
 // Só alimenta o cérebro: não gera PDF nem entra em documentos_gerados.
 const path = require('path');
 const express = require('express');
+const { extrairTextoPdf } = require('../servicos/texto');
 const multer = require('multer');
 const router = express.Router();
 const { pool } = require('../servicos/db');
@@ -38,8 +39,16 @@ router.post('/clientes/:id/anexar', (req, res) => {
       if (!rows.length) return res.status(404).json({ erro: 'cliente não encontrado' });
       const cliente = rows[0];
 
-      await anexarViaN8n(req.file.buffer, nome, {
-        conta_id: cliente.conta_id, cliente_nome: cliente.nome, cliente_id: cliente.id,
+      // O extrator de PDF do n8n perde letras em alguns arquivos (fontes embutidas); extraímos aqui
+      // com o Poppler e mandamos texto puro, guardando o nome original como título.
+      let conteudo = req.file.buffer, nomeEnvio = nome;
+      if (path.extname(nome).toLowerCase() === '.pdf') {
+        const texto = await extrairTextoPdf(req.file.buffer);
+        if (texto) { conteudo = Buffer.from(texto, 'utf8'); nomeEnvio = nome.replace(/\.pdf$/i, '.txt'); }
+        else console.warn(`[anexar] não extraí texto de "${nome}" — enviando o PDF como está`);
+      }
+      await anexarViaN8n(conteudo, nomeEnvio, {
+        conta_id: cliente.conta_id, cliente_nome: cliente.nome, cliente_id: cliente.id, titulo: nome,
       });
       res.json({ ok: true });
     } catch (e) {
