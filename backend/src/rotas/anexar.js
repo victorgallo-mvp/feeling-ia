@@ -6,7 +6,9 @@ const express = require('express');
 const multer = require('multer');
 const router = express.Router();
 const { pool } = require('../servicos/db');
-const { anexarViaN8n } = require('../servicos/n8n');
+const crypto = require('crypto');
+const { anexarViaN8n, resumirReuniaoViaN8n, tiposConfigurados } = require('../servicos/n8n');
+const { extrairTexto } = require('../servicos/texto');
 
 const EXTENSOES = ['.pdf', '.docx', '.txt']; // o que o workflow de ingestão aceita
 const LIMITE_MB = 25;
@@ -41,7 +43,34 @@ router.post('/clientes/:id/anexar', (req, res) => {
       await anexarViaN8n(req.file.buffer, nome, {
         conta_id: cliente.conta_id, cliente_nome: cliente.nome, cliente_id: cliente.id, titulo: nome,
       });
-      res.json({ ok: true });
+
+      // Opcional (padrão ligado): o mesmo agente das reuniões lê o documento e sugere cadastro.
+      let sugestoes = null, aviso = null;
+      const extrair = req.body?.extrair !== 'false' && req.body?.extrair !== '0';
+      if (extrair && tiposConfigurados().reuniao) {
+        try {
+          const texto = await extrairTexto(req.file.buffer, nome);
+          if (texto.length >= 200) {
+            const r = await resumirReuniaoViaN8n({
+              cliente_id: cliente.id, cliente_nome: cliente.nome, conta_id: cliente.conta_id, titulo: nome, texto, modo: 'documento',
+            });
+            sugestoes = r.sugestoes;
+            if (sugestoes) {
+              const item = { id: crypto.randomBytes(6).toString('hex'), origem: nome, criado_em: new Date().toISOString(), sugestoes, aplicadas: [] };
+              await pool.query(
+                `UPDATE clientes SET extras = jsonb_set(COALESCE(extras, '{}'::jsonb), '{sugestoes}',
+                   COALESCE(extras->'sugestoes', '[]'::jsonb) || $2::jsonb) WHERE id = $1`,
+                [cliente.id, JSON.stringify([item])]
+              );
+              sugestoes = item;
+            }
+          } else aviso = 'não consegui ler texto suficiente pra sugerir cadastro';
+        } catch (e) {
+          console.error('[anexar] extração de cadastro falhou:', e.message);
+          aviso = 'o arquivo entrou no cérebro, mas a extração de cadastro falhou';
+        }
+      }
+      res.json({ ok: true, sugestoes, aviso });
     } catch (e) {
       console.error(e);
       res.status(500).json({ erro: e.message });

@@ -52,6 +52,10 @@ Cada documento tem um `estado`: `ok` (PDF no storage), `regeneravel` (PDF sumiu 
 
 `POST /api/clientes/:id/reunioes` (multipart: `arquivo` TXT/MD/DOCX/PDF, `titulo`, `data_reuniao` opcionais) → o cockpit extrai o texto, o n8n (`N8N_WEBHOOK_REUNIAO`) devolve `{ markdown, sugestoes }` → vira documento `reuniao` (PDF + markdown + `extras`), só o resumo é indexado no cérebro (`tipo: reuniao`), a transcrição bruta fica no storage (`GET /api/documentos/:id/transcricao`). As sugestões de cadastro são aplicadas pela pessoa (`PUT /api/clientes/:id`) e registradas em `PATCH /api/documentos/:id/sugestoes`.
 
+## Sugestões de cadastro
+
+Duas origens, mesmo painel em "Informações do cliente": reuniões (`documentos_gerados.extras.sugestoes`) e anexos (`clientes.extras.sugestoes[]`, gerado no upload quando `extrair` ≠ false — o mesmo workflow de reunião em `modo: documento`). A pessoa aplica item a item (`PUT /api/clientes/:id`) e o cockpit registra em `PATCH /api/documentos/:id/sugestoes` ou `PATCH /api/clientes/:id/sugestoes/:sid`.
+
 ## Exclusões
 
 - `DELETE /api/clientes/:id/anexos?titulo=...` tira um arquivo do cérebro (todos os chunks daquele título).

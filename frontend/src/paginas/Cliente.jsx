@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import FormCliente from './FormCliente.jsx';
 import Reunioes from './Reunioes.jsx';
-import { anexarDocumento, atualizarCliente, buscarCliente, excluirAnexo, excluirCliente, excluirDocumento, gerarDocumento, listarAnexos, listarDocumentos, listarTipos, removerPerdidos, resumoExclusao, urlDownload } from '../api.js';
+import SugestoesCadastro, { itensDe } from './SugestoesCadastro.jsx';
+import { anexarDocumento, atualizarCliente, buscarCliente, excluirAnexo, excluirCliente, excluirDocumento, gerarDocumento, listarAnexos, listarDocumentos, listarTipos, registrarSugestaoAnexo, registrarSugestoes, removerPerdidos, resumoExclusao, urlDownload } from '../api.js';
 
 const TIPOS = [
   { tipo: 'relatorio', rotulo: 'Relatório', acao: 'Gerar Relatório' },
@@ -30,6 +31,7 @@ export default function Cliente() {
   const [novoId, setNovoId] = useState(null);
   const [anexo, setAnexo] = useState({ estado: 'parado', mensagem: '' }); // parado | enviando | ok | erro
   const [arrastando, setArrastando] = useState(false);
+  const [extrair, setExtrair] = useState(true); // sugerir cadastro a partir do anexo
   const [editando, setEditando] = useState(false);
   const [ligados, setLigados] = useState(null);
   const [filtro, setFiltro] = useState('todos'); // todos | tipo
@@ -100,10 +102,11 @@ export default function Cliente() {
       setAnexo({ estado: 'erro', mensagem: `"${arquivo.name}" não é aceito. Envie PDF, DOCX ou TXT.` });
       return;
     }
-    setAnexo({ estado: 'enviando', mensagem: `Enviando "${arquivo.name}" — a IA está lendo o arquivo, pode levar até 2 minutos.` });
+    setAnexo({ estado: 'enviando', mensagem: `Enviando "${arquivo.name}" — a IA está lendo o arquivo${extrair ? ' e montando sugestões de cadastro' : ''}, pode levar até 2 minutos.` });
     try {
-      await anexarDocumento(id, arquivo);
-      setAnexo({ estado: 'ok', mensagem: `"${arquivo.name}" entrou no cérebro. Os próximos documentos já consideram esse conteúdo.` });
+      const r = await anexarDocumento(id, arquivo, { extrair });
+      if (r.sugestoes) setCliente((c) => ({ ...c, sugestoes: [...(c.sugestoes || []), r.sugestoes] }));
+      setAnexo({ estado: 'ok', mensagem: `"${arquivo.name}" entrou no cérebro.${r.sugestoes ? ' As sugestões de cadastro estão em "Informações do cliente".' : ''}${r.aviso ? ` (${r.aviso})` : ''}` });
       listarAnexos(id).then(setAnexos).catch(() => {});
     } catch (e) {
       setAnexo({ estado: 'erro', mensagem: `Não deu para anexar "${arquivo.name}": ${e.message}` });
@@ -190,6 +193,26 @@ export default function Cliente() {
   if (!cliente) return <p className="vazio">Carregando…</p>;
 
   const enviando = anexo.estado === 'enviando';
+
+  // sugestões pendentes: de reuniões (documentos) e de anexos (cliente.sugestoes)
+  const fontes = [];
+  for (const d of documentos) {
+    if (d.tipo !== 'reuniao' || !d.sugestoes) continue;
+    fontes.push({
+      chave: `doc:${d.id}`, origem: `reunião "${d.titulo || 'sem assunto'}"${d.data_reuniao ? ` (${d.data_reuniao})` : ''}`,
+      resumo: d.sugestoes.resumo_curto, itens: itensDe(d.sugestoes), aplicadas: d.aplicadas || [],
+      registrar: (dados) => registrarSugestoes(d.id, dados),
+      depois: (dados) => setDocumentos((atual) => atual.map((x) => (x.id === d.id ? { ...x, ...(dados.descartar ? { sugestoes: null, aplicadas: [] } : { aplicadas: dados.aplicadas }) } : x))),
+    });
+  }
+  for (const sg of cliente.sugestoes || []) {
+    fontes.push({
+      chave: `anexo:${sg.id}`, origem: `arquivo "${sg.origem}"`, resumo: sg.sugestoes?.resumo_curto, itens: itensDe(sg.sugestoes), aplicadas: sg.aplicadas || [],
+      registrar: (dados) => registrarSugestaoAnexo(id, sg.id, dados),
+      depois: (dados, r) => setCliente((c) => ({ ...c, sugestoes: r?.sugestoes ?? c.sugestoes })),
+    });
+  }
+  const pendentes = fontes.filter((f) => f.itens.some((i) => !f.aplicadas.includes(i.chave)));
   // motivo que impede gerar cada tipo (null = pode gerar)
   const gerandoTipo = (tipo) => documentos.some((d) => d.tipo === tipo && d.estado === 'gerando');
   const bloqueio = (tipo) => {
@@ -310,6 +333,9 @@ export default function Cliente() {
           <h2>Informações do cliente</h2>
           {!editando && <button type="button" className="link" onClick={() => setEditando(true)}>Editar</button>}
         </div>
+        {pendentes.map((f) => (
+          <SugestoesCadastro key={f.chave} fonte={f} cliente={cliente} aoAtualizarCliente={setCliente} aoRegistrado={(fonte, dados, r) => fonte.depois(dados, r)} />
+        ))}
         {editando ? (
           <FormCliente inicial={cliente} rotuloSalvar="Salvar" aoSalvar={salvarCliente} aoCancelar={() => setEditando(false)} />
         ) : (
@@ -334,12 +360,9 @@ export default function Cliente() {
 
       <Reunioes
         clienteId={id}
-        cliente={cliente}
         documentos={documentos}
         ligado={!ligados || ligados.reuniao !== false}
         aoNovoDocumento={(doc) => { setDocumentos((atual) => [doc, ...atual]); setNovoId(doc.id); }}
-        aoAtualizarDocumento={(doc) => setDocumentos((atual) => atual.map((d) => (d.id === doc.id ? doc : d)))}
-        aoAtualizarCliente={setCliente}
       />
 
       <section className="bloco">
@@ -361,6 +384,10 @@ export default function Cliente() {
           {enviando
             ? <><span className="girando" aria-hidden="true" /> Enviando…</>
             : <span><strong>Escolha um arquivo</strong> ou arraste pra cá · PDF, DOCX ou TXT</span>}
+        </label>
+        <label className="opcao">
+          <input type="checkbox" checked={extrair} onChange={(e) => setExtrair(e.target.checked)} disabled={enviando} />
+          Sugerir cadastro a partir deste documento (setor, público, verba, concorrentes…)
         </label>
         {anexo.mensagem && (
           <p className={`aviso${anexo.estado === 'erro' ? ' aviso-erro' : ''}`} role={anexo.estado === 'erro' ? 'alert' : 'status'}>

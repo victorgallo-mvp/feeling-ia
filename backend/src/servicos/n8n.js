@@ -53,10 +53,10 @@ async function anexarViaN8n(fileBuffer, filename, { conta_id, cliente_nome, clie
 }
 
 // Resumo de reunião: manda a transcrição em texto e recebe { markdown, sugestoes }.
-async function resumirReuniaoViaN8n({ cliente_id, cliente_nome, conta_id, titulo, data_reuniao, texto }) {
+async function resumirReuniaoViaN8n({ cliente_id, cliente_nome, conta_id, titulo, data_reuniao, texto, modo }) {
   const url = WEBHOOKS_EXTRA.reuniao;
   if (!url) throw new Error('N8N_WEBHOOK_REUNIAO não configurado');
-  const resp = await axios.post(url, { cliente_id, cliente_nome, conta_id, titulo, data_reuniao, texto },
+  const resp = await axios.post(url, { cliente_id, cliente_nome, conta_id, titulo, data_reuniao, texto, modo: modo || 'reuniao' },
     { timeout: 170000, headers: { 'Content-Type': 'application/json' } });
   const markdown = resp.data?.markdown;
   if (!markdown) throw new Error('n8n não devolveu o resumo. Resposta: ' + JSON.stringify(resp.data).slice(0, 300));

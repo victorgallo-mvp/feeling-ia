@@ -4,7 +4,7 @@ const router = express.Router();
 const { pool } = require('../servicos/db');
 const { apagarPdf } = require('../servicos/storage');
 
-const CAMPOS = 'id, nome, setor, cidade, conta_id, perfil, instagram, site, google_ads_id, orientacoes, abrangencia';
+const CAMPOS = "id, nome, setor, cidade, conta_id, perfil, instagram, site, google_ads_id, orientacoes, abrangencia, COALESCE(extras->'sugestoes', '[]'::jsonb) AS sugestoes";
 const ABRANGENCIAS = ['local', 'regional', 'nacional'];
 const LIMITE_PERFIL = 20000;
 const LIMITE_ORIENTACOES = 1500; // é instrução, não documento: curto pra entrar inteiro em todo prompt
@@ -143,6 +143,26 @@ router.delete('/clientes/:id', async (req, res) => {
     const chunks = await pool.query("DELETE FROM cerebro WHERE metadata->>'cliente_id' = $1", [String(id)]);
     await pool.query('DELETE FROM clientes WHERE id = $1', [id]);
     res.json({ ok: true, documentos: docs.rowCount, chunks: chunks.rowCount });
+  } catch (e) {
+    responderErro(res, e);
+  }
+});
+
+// Registra o que foi aplicado/descartado de uma sugestão extraída de um anexo (a alteração é o PUT /clientes/:id).
+router.patch('/clientes/:id/sugestoes/:sid', async (req, res) => {
+  const aplicadas = Array.isArray(req.body?.aplicadas) ? req.body.aplicadas.filter((x) => typeof x === 'string') : null;
+  const descartar = req.body?.descartar === true;
+  if (!aplicadas && !descartar) return res.status(400).json({ erro: 'informe aplicadas (lista) ou descartar: true' });
+  try {
+    const { rows } = await pool.query("SELECT COALESCE(extras, '{}'::jsonb) AS extras FROM clientes WHERE id = $1", [req.params.id]);
+    if (!rows.length) return res.status(404).json({ erro: 'cliente não encontrado' });
+    const extras = rows[0].extras;
+    const lista = Array.isArray(extras.sugestoes) ? extras.sugestoes : [];
+    const i = lista.findIndex((x) => x.id === req.params.sid);
+    if (i < 0) return res.status(404).json({ erro: 'sugestão não encontrada' });
+    if (descartar) lista.splice(i, 1); else lista[i] = { ...lista[i], aplicadas };
+    await pool.query('UPDATE clientes SET extras = $2 WHERE id = $1', [req.params.id, JSON.stringify({ ...extras, sugestoes: lista })]);
+    res.json({ ok: true, sugestoes: lista });
   } catch (e) {
     responderErro(res, e);
   }

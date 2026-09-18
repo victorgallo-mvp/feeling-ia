@@ -30,9 +30,10 @@ export const excluirDocumento = (id) => req(`/api/documentos/${id}`, { method: '
 export const removerPerdidos = (clienteId) => req(`/api/clientes/${clienteId}/documentos/perdidos`, { method: 'DELETE' });
 export const gerarDocumento = (id, tipo) => req(`/api/clientes/${id}/gerar/${tipo}`, { method: 'POST' });
 
-export function anexarDocumento(id, arquivo) {
+export function anexarDocumento(id, arquivo, { extrair = true } = {}) {
   const form = new FormData();
   form.append('arquivo', arquivo);
+  form.append('extrair', extrair ? 'true' : 'false');
   return req(`/api/clientes/${id}/anexar`, { method: 'POST', body: form });
 }
 
@@ -43,6 +44,7 @@ export function enviarReuniao(id, arquivo, { titulo, data_reuniao } = {}) {
   if (data_reuniao) form.append('data_reuniao', data_reuniao);
   return req(`/api/clientes/${id}/reunioes`, { method: 'POST', body: form });
 }
+export const registrarSugestaoAnexo = (clienteId, sid, dados) => req(`/api/clientes/${clienteId}/sugestoes/${sid}`, comJson('PATCH', dados));
 export const registrarSugestoes = (docId, dados) => req(`/api/documentos/${docId}/sugestoes`, comJson('PATCH', dados));
 export const urlTranscricao = (doc) => `${API_URL}/api/documentos/${doc.id}/transcricao`;
 

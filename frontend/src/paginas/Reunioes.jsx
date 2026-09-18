@@ -1,47 +1,13 @@
-import { useMemo, useRef, useState } from 'react';
-import { atualizarCliente, enviarReuniao, registrarSugestoes, urlDownload, urlTranscricao } from '../api.js';
+import { useRef, useState } from 'react';
+import { enviarReuniao, urlDownload, urlTranscricao } from '../api.js';
 
 const EXTENSOES = ['.txt', '.md', '.docx', '.pdf'];
-const CAMPOS = { setor: 'Setor', cidade: 'Cidade', site: 'Site', instagram: 'Instagram', abrangencia: 'Abrangência' };
-
-// Sugestões de uma reunião viram uma lista plana de itens marcáveis.
-function itensDe(doc) {
-  const s = doc?.sugestoes;
-  if (!s) return [];
-  const itens = [];
-  for (const k of Object.keys(CAMPOS)) if (s[k]) itens.push({ chave: k, rotulo: CAMPOS[k], valor: s[k], grupo: 'cadastro' });
-  (s.perfil_adicoes || []).forEach((v, i) => itens.push({ chave: `perfil:${i}`, rotulo: 'Perfil', valor: v, grupo: 'perfil' }));
-  (s.orientacoes_adicoes || []).forEach((v, i) => itens.push({ chave: `orientacoes:${i}`, rotulo: 'Orientações', valor: v, grupo: 'orientacoes' }));
-  return itens;
-}
-
 // Seção "Reuniões": upload da transcrição + sugestões de cadastro da última reunião pendente.
-export default function Reunioes({ clienteId, cliente, documentos, ligado, aoNovoDocumento, aoAtualizarDocumento, aoAtualizarCliente }) {
+export default function Reunioes({ clienteId, documentos, ligado, aoNovoDocumento }) {
   const [titulo, setTitulo] = useState('');
   const [data, setData] = useState('');
   const [estado, setEstado] = useState({ fase: 'parado', mensagem: '' }); // parado | enviando | ok | erro
-  const [marcados, setMarcados] = useState(null); // Set de chaves; null = tudo marcado
-  const [aplicando, setAplicando] = useState(false);
   const inputRef = useRef(null);
-
-  // última reunião com sugestões ainda não tratadas
-  const pendente = useMemo(() => {
-    for (const d of documentos) {
-      if (d.tipo !== 'reuniao' || !d.sugestoes) continue;
-      const itens = itensDe(d);
-      const feitas = new Set(d.aplicadas || []);
-      const restantes = itens.filter((i) => !feitas.has(i.chave));
-      if (restantes.length) return { doc: d, itens: restantes };
-    }
-    return null;
-  }, [documentos]);
-
-  const selecionados = (chave) => (marcados ? marcados.has(chave) : true);
-  const alternar = (chave) => setMarcados((m) => {
-    const base = new Set(m ?? pendente.itens.map((i) => i.chave));
-    base.has(chave) ? base.delete(chave) : base.add(chave);
-    return base;
-  });
 
   async function enviar(arquivo) {
     if (!arquivo || estado.fase === 'enviando') return;
@@ -51,56 +17,14 @@ export default function Reunioes({ clienteId, cliente, documentos, ligado, aoNov
     try {
       const r = await enviarReuniao(clienteId, arquivo, { titulo, data_reuniao: data });
       aoNovoDocumento({ ...r.documento, sugestoes: r.sugestoes, aplicadas: [] });
-      setMarcados(null);
       setTitulo(''); setData('');
       setEstado({ fase: 'ok', mensagem: r.indexado
-        ? 'Resumo salvo e adicionado ao cérebro. Confira as sugestões de cadastro abaixo.'
+        ? 'Resumo salvo e adicionado ao cérebro. As sugestões de cadastro estão em "Informações do cliente".'
         : 'Resumo salvo, mas não entrou no cérebro (o n8n de anexar não respondeu). Você pode anexar o PDF manualmente.' });
     } catch (e) {
       setEstado({ fase: 'erro', mensagem: `Não deu para resumir: ${e.message}` });
     } finally {
       if (inputRef.current) inputRef.current.value = '';
-    }
-  }
-
-  async function aplicar() {
-    if (!pendente) return;
-    const escolhidos = pendente.itens.filter((i) => selecionados(i.chave));
-    if (!escolhidos.length) return;
-    setAplicando(true);
-    try {
-      const dados = {
-        nome: cliente.nome, setor: cliente.setor, cidade: cliente.cidade, conta_id: cliente.conta_id, instagram: cliente.instagram,
-        site: cliente.site, google_ads_id: cliente.google_ads_id, abrangencia: cliente.abrangencia,
-        perfil: cliente.perfil || '', orientacoes: cliente.orientacoes || '',
-      };
-      for (const i of escolhidos) {
-        if (i.grupo === 'cadastro') dados[i.chave] = i.valor;
-        else if (i.grupo === 'perfil') dados.perfil = `${dados.perfil.trimEnd()}\n${i.valor}`.trim();
-        else dados.orientacoes = `${dados.orientacoes.trimEnd()}\n${i.valor}`.trim();
-      }
-      if (dados.orientacoes.length > 1500) throw new Error('as orientações passariam de 1.500 caracteres — edite a ficha e enxugue antes');
-      const atualizado = await atualizarCliente(clienteId, dados);
-      aoAtualizarCliente(atualizado);
-      const aplicadas = [...(pendente.doc.aplicadas || []), ...escolhidos.map((i) => i.chave)];
-      await registrarSugestoes(pendente.doc.id, { aplicadas });
-      aoAtualizarDocumento({ ...pendente.doc, aplicadas });
-      setMarcados(null);
-    } catch (e) {
-      window.alert(`Não deu para aplicar: ${e.message}`);
-    } finally {
-      setAplicando(false);
-    }
-  }
-
-  async function descartar() {
-    if (!pendente || !window.confirm('Descartar as sugestões desta reunião? O resumo continua salvo.')) return;
-    try {
-      await registrarSugestoes(pendente.doc.id, { descartar: true });
-      aoAtualizarDocumento({ ...pendente.doc, sugestoes: null, aplicadas: [] });
-      setMarcados(null);
-    } catch (e) {
-      window.alert(`Não deu para descartar: ${e.message}`);
     }
   }
 
@@ -131,34 +55,6 @@ export default function Reunioes({ clienteId, cliente, documentos, ligado, aoNov
           </label>
           {estado.mensagem && <p className={`aviso${estado.fase === 'erro' ? ' aviso-erro' : ''}`} role={estado.fase === 'erro' ? 'alert' : 'status'}>{estado.mensagem}</p>}
         </>
-      )}
-
-      {pendente && (
-        <div className="sugestoes">
-          <div className="bloco-topo">
-            <h3>Sugestões para o cadastro</h3>
-            <span className="doc-data">da reunião "{pendente.doc.titulo || 'sem assunto'}"{pendente.doc.data_reuniao ? ` · ${pendente.doc.data_reuniao}` : ''}</span>
-          </div>
-          {pendente.doc.sugestoes?.resumo_curto && <p className="sugestoes-resumo">{pendente.doc.sugestoes.resumo_curto}</p>}
-          <ul className="lista-sugestoes">
-            {pendente.itens.map((i) => (
-              <li key={i.chave}>
-                <label className="sugestao">
-                  <input type="checkbox" checked={selecionados(i.chave)} onChange={() => alternar(i.chave)} disabled={aplicando} />
-                  <span className="sugestao-rotulo">{i.rotulo}</span>
-                  <span className="sugestao-valor">{i.valor}</span>
-                </label>
-              </li>
-            ))}
-          </ul>
-          <div className="acoes">
-            <button type="button" className="botao" disabled={aplicando || !pendente.itens.some((i) => selecionados(i.chave))} onClick={aplicar}>
-              {aplicando ? 'Aplicando…' : 'Aplicar selecionadas ao cadastro'}
-            </button>
-            <button type="button" className="botao botao-secundario" disabled={aplicando} onClick={descartar}>Descartar</button>
-          </div>
-          <p className="form-ajuda">Setor, cidade, site, Instagram e abrangência substituem o valor atual; perfil e orientações recebem as linhas novas no fim. Nada muda sem clicar em aplicar.</p>
-        </div>
       )}
 
       {documentos.some((d) => d.tipo === 'reuniao') && (
