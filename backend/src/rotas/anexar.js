@@ -40,7 +40,7 @@ router.post('/clientes/:id/anexar', (req, res) => {
       const cliente = rows[0];
 
       // O extrator de PDF do n8n perde letras em alguns arquivos (fontes embutidas); extraímos aqui
-      // com o Poppler e mandamos texto puro, guardando o nome original como título.
+      // com o pdf.js e mandamos texto puro, guardando o nome original como título.
       let conteudo = req.file.buffer, nomeEnvio = nome;
       if (path.extname(nome).toLowerCase() === '.pdf') {
         const texto = await extrairTextoPdf(req.file.buffer);
