@@ -39,7 +39,7 @@ async function anexarViaN8n(fileBuffer, filename, { conta_id, cliente_nome, clie
   form.append('conta_id', conta_id || '');
   form.append('cliente_nome', cliente_nome || '');
   form.append('cliente_id', cliente_id != null ? String(cliente_id) : ''); // metadata pra filtrar o cérebro por cliente
-  form.append('titulo', titulo || filename); // nome original do arquivo (o PDF pode ir como .txt)
+  form.append('titulo', titulo || filename); // nome original do arquivo, vira metadata no cérebro
   await axios.post(url, form, { timeout: 120000, headers: form.getHeaders() });
   return { ok: true };
 }
