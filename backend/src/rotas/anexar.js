@@ -49,4 +49,37 @@ router.post('/clientes/:id/anexar', (req, res) => {
   });
 });
 
+// Arquivos deste cliente no cérebro (agrupados pelo título = nome do arquivo).
+router.get('/clientes/:id/anexos', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT metadata->>'titulo' AS titulo, metadata->>'tipo' AS tipo, count(*)::int AS chunks
+       FROM cerebro WHERE metadata->>'cliente_id' = $1
+       GROUP BY 1, 2 ORDER BY 1`,
+      [String(req.params.id)]
+    );
+    res.json(rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ erro: e.message });
+  }
+});
+
+// Remove do cérebro todos os chunks de um arquivo deste cliente.
+router.delete('/clientes/:id/anexos', async (req, res) => {
+  const titulo = typeof req.query.titulo === 'string' ? req.query.titulo : '';
+  if (!titulo) return res.status(400).json({ erro: 'informe o título do anexo' });
+  try {
+    const { rowCount } = await pool.query(
+      "DELETE FROM cerebro WHERE metadata->>'cliente_id' = $1 AND metadata->>'titulo' = $2",
+      [String(req.params.id), titulo]
+    );
+    if (!rowCount) return res.status(404).json({ erro: 'anexo não encontrado' });
+    res.json({ ok: true, chunks: rowCount });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ erro: e.message });
+  }
+});
+
 module.exports = router;

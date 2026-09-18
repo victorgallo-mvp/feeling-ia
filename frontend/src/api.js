@@ -22,6 +22,10 @@ const comJson = (method, dados) => ({
 export const criarCliente = (dados) => req('/api/clientes', comJson('POST', dados));
 export const atualizarCliente = (id, dados) => req(`/api/clientes/${id}`, comJson('PUT', dados));
 export const listarDocumentos = (id) => req(`/api/clientes/${id}/documentos`);
+export const listarAnexos = (id) => req(`/api/clientes/${id}/anexos`);
+export const excluirAnexo = (id, titulo) => req(`/api/clientes/${id}/anexos?titulo=${encodeURIComponent(titulo)}`, { method: 'DELETE' });
+export const resumoExclusao = (id) => req(`/api/clientes/${id}/resumo-exclusao`);
+export const excluirCliente = (id) => req(`/api/clientes/${id}`, { method: 'DELETE' });
 export const excluirDocumento = (id) => req(`/api/documentos/${id}`, { method: 'DELETE' });
 export const removerPerdidos = (clienteId) => req(`/api/clientes/${clienteId}/documentos/perdidos`, { method: 'DELETE' });
 export const gerarDocumento = (id, tipo) => req(`/api/clientes/${id}/gerar/${tipo}`, { method: 'POST' });

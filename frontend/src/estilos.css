@@ -200,6 +200,22 @@ code {
 .link-erro { color: var(--erro); }
 .link:disabled { opacity: 0.5; cursor: default; text-decoration: none; }
 
+/* Anexos no cérebro */
+.lista-anexos { list-style: none; margin: 14px 0 0; padding: 0; }
+.anexo { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 4px; border-top: 1px solid var(--linha); }
+.anexo .doc-tipo { font-weight: 400; font-size: 14px; }
+
+/* Zona de perigo */
+.bloco-perigo { border-color: #f0c9c5; }
+.bloco-perigo h2 { border-left-color: var(--erro); }
+.botao-perigo { background: var(--papel); color: var(--erro); border-color: #e3a6a0; }
+.botao-perigo:hover:not(:disabled) { background: var(--erro-fundo); }
+.form-campo select {
+  width: 100%; padding: 9px 12px; font: inherit; font-size: 14px; color: var(--texto);
+  border: 1px solid var(--linha); border-radius: 6px; background: var(--papel);
+}
+.form-campo select:focus-visible { outline: 2px solid var(--petroleo); outline-offset: 1px; border-color: transparent; }
+
 /* Documentos */
 .lista-docs { list-style: none; margin: 0; padding: 0; }
 .doc {

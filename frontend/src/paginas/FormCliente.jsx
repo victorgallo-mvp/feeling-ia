@@ -12,7 +12,7 @@ Verba mensal de mídia:
 Tom de voz:
 Observações:`;
 
-const VAZIO = { nome: '', setor: '', cidade: '', conta_id: '', perfil: '', instagram: '', site: '', google_ads_id: '', orientacoes: '' };
+const VAZIO = { nome: '', setor: '', cidade: '', conta_id: '', perfil: '', instagram: '', site: '', google_ads_id: '', orientacoes: '', abrangencia: '' };
 
 const EXEMPLO_ORIENTACOES = `Ex.: Foco deste mês é a campanha de Dia das Mães.
 Não citar o concorrente X nos documentos.
@@ -69,6 +69,18 @@ export default function FormCliente({ inicial, rotuloSalvar, aoSalvar, aoCancela
         <div className="form-campo">
           <label htmlFor="campo-cidade">Cidade</label>
           <input {...campo('cidade')} placeholder="ex.: Divinópolis" autoComplete="off" />
+        </div>
+        <div className="form-campo form-campo-largo">
+          <label htmlFor="campo-abrangencia">Abrangência do mercado</label>
+          <select {...campo('abrangencia')}>
+            <option value="">Deixar a IA inferir pelo perfil e pelo site</option>
+            <option value="local">Local — compete na cidade e região</option>
+            <option value="regional">Regional — compete no estado ou em várias cidades</option>
+            <option value="nacional">Nacional — e-commerce ou venda para todo o Brasil</option>
+          </select>
+          <p className="form-ajuda">
+            Define onde a pesquisa procura concorrentes e dados de mercado. Um negócio pode ser de Divinópolis e vender para o Brasil inteiro.
+          </p>
         </div>
         <div className="form-campo form-campo-largo">
           <label htmlFor="campo-conta_id">ID da conta no Sentinel</label>

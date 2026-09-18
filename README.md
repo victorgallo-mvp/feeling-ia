@@ -48,6 +48,11 @@ npm run dev               # http://localhost:5173
 
 Cada documento tem um `estado`: `ok` (PDF no storage), `regeneravel` (PDF sumiu num deploy sem volume, mas o `markdown` está no banco — o download regenera) ou `perdido` (sem PDF e sem texto). A tela filtra por tipo, marca o mais recente de cada tipo, exclui um a um (`DELETE /api/documentos/:id`) e remove os perdidos de uma vez (`DELETE /api/clientes/:id/documentos/perdidos`).
 
+## Exclusões
+
+- `DELETE /api/clientes/:id/anexos?titulo=...` tira um arquivo do cérebro (todos os chunks daquele título).
+- `DELETE /api/clientes/:id` apaga o cliente, os documentos gerados (+ PDFs) e tudo que ele tem no cérebro. A tela pede o nome do cliente para confirmar; `GET /api/clientes/:id/resumo-exclusao` mostra as contagens antes.
+
 ## Onde cada informação do cliente mora
 
 | Informação | Onde | Quem lê |
@@ -55,6 +60,7 @@ Cada documento tem um `estado`: `ok` (PDF no storage), `regeneravel` (PDF sumiu 
 | nome, setor, cidade, `conta_id` | colunas de `clientes` | n8n por SQL (valor exato) |
 | `instagram` (handle sem @), `site` (com https://), `google_ads_id` (123-456-7890) | colunas de `clientes` | vão no corpo de todo webhook de geração |
 | perfil (público, diferenciais, ticket…) | `clientes.perfil` (texto, editar substitui) | n8n injeta direto no prompt de pesquisa/briefing |
+| abrangência (`local`/`regional`/`nacional`, vazio = IA infere) | `clientes.abrangencia` | define onde a pesquisa busca concorrentes e mercado |
 | orientações para a IA (foco do momento, o que evitar, tom) | `clientes.orientacoes` (até 1.500 caracteres) | bloco fixo "Orientações da equipe" nos 4 workflows — nunca vai pro cérebro |
 | documentos longos (PDF/DOCX/TXT) | tabela `cerebro` via upload (metadata `cliente_id`, `titulo`, `tipo` — o webhook aceita `tipo`, padrão `anexo`) | n8n por busca semântica filtrada por `cliente_id` |
 

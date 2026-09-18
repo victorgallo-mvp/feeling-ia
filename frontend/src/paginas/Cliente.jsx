@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import FormCliente from './FormCliente.jsx';
-import { anexarDocumento, atualizarCliente, buscarCliente, excluirDocumento, gerarDocumento, listarDocumentos, listarTipos, removerPerdidos, urlDownload } from '../api.js';
+import { anexarDocumento, atualizarCliente, buscarCliente, excluirAnexo, excluirCliente, excluirDocumento, gerarDocumento, listarAnexos, listarDocumentos, listarTipos, removerPerdidos, resumoExclusao, urlDownload } from '../api.js';
 
 const TIPOS = [
   { tipo: 'relatorio', rotulo: 'Relatório', acao: 'Gerar Relatório' },
@@ -10,6 +10,7 @@ const TIPOS = [
   { tipo: 'analise', rotulo: 'Análise de Presença Digital', acao: 'Analisar Presença Digital' },
 ];
 const ROTULOS = Object.fromEntries(TIPOS.map((t) => [t.tipo, t.rotulo]));
+const ABRANGENCIA = { local: 'Local (cidade e região)', regional: 'Regional', nacional: 'Nacional' };
 
 // mesmo filtro do backend (rotas/anexar.js)
 const EXTENSOES = ['.pdf', '.docx', '.txt'];
@@ -19,6 +20,7 @@ const formatarData = (iso) =>
 
 export default function Cliente() {
   const { id } = useParams();
+  const navegar = useNavigate();
   const [cliente, setCliente] = useState(null);
   const [documentos, setDocumentos] = useState([]);
   const [erro, setErro] = useState('');
@@ -30,7 +32,10 @@ export default function Cliente() {
   const [editando, setEditando] = useState(false);
   const [ligados, setLigados] = useState(null);
   const [filtro, setFiltro] = useState('todos'); // todos | tipo
-  const [ocupadoDoc, setOcupadoDoc] = useState(null); // id em exclusão, ou 'perdidos' // { tipo: bool } — quais documentos têm workflow no n8n
+  const [ocupadoDoc, setOcupadoDoc] = useState(null); // id em exclusão, ou 'perdidos'
+  const [anexos, setAnexos] = useState([]); // arquivos deste cliente no cérebro
+  const [ocupadoAnexo, setOcupadoAnexo] = useState(null);
+  const [excluindoCliente, setExcluindoCliente] = useState(false); // { tipo: bool } — quais documentos têm workflow no n8n
   const inputArquivo = useRef(null);
 
   useEffect(() => {
@@ -38,8 +43,8 @@ export default function Cliente() {
     setErro('');
     setAnexo({ estado: 'parado', mensagem: '' });
     setEditando(false);
-    Promise.all([buscarCliente(id), listarDocumentos(id)])
-      .then(([c, docs]) => { setCliente(c); setDocumentos(docs); })
+    Promise.all([buscarCliente(id), listarDocumentos(id), listarAnexos(id).catch(() => [])])
+      .then(([c, docs, ax]) => { setCliente(c); setDocumentos(docs); setAnexos(ax); })
       .catch((e) => setErro(e.message));
   }, [id]);
 
@@ -72,6 +77,7 @@ export default function Cliente() {
     try {
       await anexarDocumento(id, arquivo);
       setAnexo({ estado: 'ok', mensagem: `"${arquivo.name}" entrou no cérebro. Os próximos documentos já consideram esse conteúdo.` });
+      listarAnexos(id).then(setAnexos).catch(() => {});
     } catch (e) {
       setAnexo({ estado: 'erro', mensagem: `Não deu para anexar "${arquivo.name}": ${e.message}` });
     } finally {
@@ -109,6 +115,36 @@ export default function Cliente() {
       window.alert(`Não deu para remover: ${e.message}`);
     } finally {
       setOcupadoDoc(null);
+    }
+  }
+
+  async function removerAnexo(a) {
+    if (!window.confirm(`Tirar "${a.titulo}" do cérebro deste cliente? Os próximos documentos deixam de considerar esse conteúdo.`)) return;
+    setOcupadoAnexo(a.titulo);
+    try {
+      await excluirAnexo(id, a.titulo);
+      setAnexos((atual) => atual.filter((x) => x.titulo !== a.titulo));
+    } catch (e) {
+      window.alert(`Não deu para remover: ${e.message}`);
+    } finally {
+      setOcupadoAnexo(null);
+    }
+  }
+
+  async function apagarCliente() {
+    let r = { documentos: documentos.length, anexos: anexos.length, chunks: 0 };
+    try { r = await resumoExclusao(id); } catch {}
+    const msg = `Excluir o cliente "${cliente.nome}"?\n\nIsso apaga de vez: o cadastro, ${r.documentos} documento(s) gerado(s) com seus PDFs e ${r.anexos} arquivo(s) anexado(s) ao cérebro. Não dá para desfazer.\n\nDigite o nome do cliente para confirmar.`;
+    const digitado = window.prompt(msg, '');
+    if (digitado === null) return;
+    if (digitado.trim().toLowerCase() !== cliente.nome.trim().toLowerCase()) { window.alert('O nome não confere. Nada foi apagado.'); return; }
+    setExcluindoCliente(true);
+    try {
+      await excluirCliente(id);
+      navegar('/');
+    } catch (e) {
+      window.alert(`Não deu para excluir: ${e.message}`);
+      setExcluindoCliente(false);
     }
   }
 
@@ -244,6 +280,7 @@ export default function Cliente() {
             <dl className="ficha">
               <div><dt>Setor</dt><dd>{cliente.setor || '—'}</dd></div>
               <div><dt>Cidade</dt><dd>{cliente.cidade || '—'}</dd></div>
+              <div><dt>Abrangência</dt><dd>{ABRANGENCIA[cliente.abrangencia] || 'a IA infere'}</dd></div>
               <div><dt>ID da conta no Sentinel</dt><dd>{cliente.conta_id ? <code>{cliente.conta_id}</code> : '—'}</dd></div>
               <div><dt>Instagram</dt><dd>{cliente.instagram ? <a href={`https://instagram.com/${cliente.instagram}`} target="_blank" rel="noreferrer">@{cliente.instagram}</a> : '—'}</dd></div>
               <div><dt>Site</dt><dd>{cliente.site ? <a href={cliente.site} target="_blank" rel="noreferrer">{cliente.site.replace(/^https?:\/\//, '')}</a> : '—'}</dd></div>
@@ -283,6 +320,31 @@ export default function Cliente() {
             {anexo.mensagem}
           </p>
         )}
+        {anexos.length > 0 && (
+          <ul className="lista-anexos">
+            {anexos.map((a) => (
+              <li key={a.titulo} className="anexo">
+                <div className="doc-info">
+                  <span className="doc-tipo">{a.titulo}</span>
+                  <span className="doc-data">{a.tipo === 'relatorio_semanal' ? 'relatório semanal' : 'anexo'} · {a.chunks} {a.chunks === 1 ? 'trecho' : 'trechos'} no cérebro</span>
+                </div>
+                <button type="button" className="link link-erro" disabled={ocupadoAnexo !== null} onClick={() => removerAnexo(a)}>
+                  {ocupadoAnexo === a.titulo ? '…' : 'Remover do cérebro'}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="bloco bloco-perigo">
+        <div className="bloco-topo">
+          <h2>Excluir cliente</h2>
+          <button type="button" className="botao botao-perigo" disabled={excluindoCliente} onClick={apagarCliente}>
+            {excluindoCliente ? 'Excluindo…' : 'Excluir cliente'}
+          </button>
+        </div>
+        <p className="vazio">Apaga o cadastro, os documentos gerados e tudo que foi anexado ao cérebro deste cliente. Pede o nome para confirmar.</p>
       </section>
     </>
   );
