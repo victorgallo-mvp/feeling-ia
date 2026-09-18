@@ -48,6 +48,8 @@ async function migrar() {
       caminho TEXT,              -- caminho do PDF no storage
       criado_em TIMESTAMP DEFAULT now()
     );
+    -- markdown devolvido pelo n8n: deixa o briefing ler a última pesquisa por SQL
+    ALTER TABLE documentos_gerados ADD COLUMN IF NOT EXISTS markdown TEXT;
   `);
 }
 

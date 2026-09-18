@@ -39,7 +39,7 @@ router.post('/clientes/:id/anexar', (req, res) => {
       const cliente = rows[0];
 
       await anexarViaN8n(req.file.buffer, nome, {
-        conta_id: cliente.conta_id, cliente_nome: cliente.nome,
+        conta_id: cliente.conta_id, cliente_nome: cliente.nome, cliente_id: cliente.id,
       });
       res.json({ ok: true });
     } catch (e) {

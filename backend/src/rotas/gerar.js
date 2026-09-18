@@ -33,9 +33,9 @@ router.post('/clientes/:id/gerar/:tipo', async (req, res) => {
     // 3. salva e registra
     const caminho = await salvarPdf(pdfBuffer, cliente.id, tipo);
     const ins = await pool.query(
-      `INSERT INTO documentos_gerados (cliente_id, cliente_nome, tipo, caminho)
-       VALUES ($1,$2,$3,$4) RETURNING id, tipo, criado_em`,
-      [cliente.id, cliente.nome, tipo, caminho]
+      `INSERT INTO documentos_gerados (cliente_id, cliente_nome, tipo, caminho, markdown)
+       VALUES ($1,$2,$3,$4,$5) RETURNING id, tipo, criado_em`,
+      [cliente.id, cliente.nome, tipo, caminho, markdown]
     );
     const doc = ins.rows[0];
     res.json({ ...doc, url_download: `/api/documentos/${doc.id}/download` });
