@@ -44,6 +44,10 @@ npm run dev               # http://localhost:5173
 - [x] Presença digital — campos `instagram`, `site`, `google_ads_id` + documento `analise` (webhook `N8N_WEBHOOK_PRESENCA`; sem ele o botão fica "em breve")
 - [x] Deploy — Railway (backend) + Vercel (frontend)
 
+## Documentos gerados
+
+Cada documento tem um `estado`: `ok` (PDF no storage), `regeneravel` (PDF sumiu num deploy sem volume, mas o `markdown` está no banco — o download regenera) ou `perdido` (sem PDF e sem texto). A tela filtra por tipo, marca o mais recente de cada tipo, exclui um a um (`DELETE /api/documentos/:id`) e remove os perdidos de uma vez (`DELETE /api/clientes/:id/documentos/perdidos`).
+
 ## Onde cada informação do cliente mora
 
 | Informação | Onde | Quem lê |

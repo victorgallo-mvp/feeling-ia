@@ -181,6 +181,24 @@ code {
   .ficha, .form-grade, .form-grade-3 { grid-template-columns: 1fr; }
 }
 
+/* Documentos: filtros por tipo, estados e ações */
+.filtros { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.filtro {
+  padding: 5px 10px; font: inherit; font-size: 13px; font-weight: 700; color: var(--texto-suave);
+  background: var(--fundo); border: 1px solid var(--linha); border-radius: 999px; cursor: pointer;
+}
+.filtro:hover { border-color: var(--petroleo); color: var(--petroleo); }
+.filtro.ativo { background: var(--marinho); border-color: var(--marinho); color: #fff; }
+.filtro:focus-visible { outline: 2px solid var(--petroleo); outline-offset: 2px; }
+.filtro-n { font-weight: 400; opacity: 0.8; margin-left: 3px; }
+.etiqueta-ok { background: #dcefed; color: var(--petroleo-escuro); margin-left: 8px; vertical-align: middle; }
+.etiqueta-erro { background: var(--erro-fundo); color: var(--erro); margin-left: 8px; vertical-align: middle; }
+.doc-acoes { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
+.doc-nota { font-size: 13px; color: var(--texto-suave); }
+.doc-perdido .doc-tipo { color: var(--texto-suave); }
+.link-erro { color: var(--erro); }
+.link:disabled { opacity: 0.5; cursor: default; text-decoration: none; }
+
 /* Documentos */
 .lista-docs { list-style: none; margin: 0; padding: 0; }
 .doc {
@@ -188,7 +206,7 @@ code {
   padding: 12px 10px; border-bottom: 1px solid var(--linha); border-radius: 6px;
 }
 .doc:last-child { border-bottom: none; }
-.doc > div { display: flex; flex-direction: column; }
+.doc-info { display: flex; flex-direction: column; min-width: 0; }
 .doc-tipo { font-weight: 700; color: var(--marinho); }
 .doc-data { font-size: 13px; color: var(--texto-suave); }
 .doc-novo { animation: destacar 2.4s ease-out; }
@@ -204,5 +222,7 @@ code {
 @media (max-width: 520px) {
   .conteudo { padding: 22px 16px 48px; }
   .acoes { flex-direction: column; }
+  .doc { flex-direction: column; align-items: flex-start; }
+  .doc-acoes { width: 100%; justify-content: space-between; }
   .botao { justify-content: center; }
 }

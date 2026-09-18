@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import FormCliente from './FormCliente.jsx';
-import { anexarDocumento, atualizarCliente, buscarCliente, gerarDocumento, listarDocumentos, listarTipos, urlDownload } from '../api.js';
+import { anexarDocumento, atualizarCliente, buscarCliente, excluirDocumento, gerarDocumento, listarDocumentos, listarTipos, removerPerdidos, urlDownload } from '../api.js';
 
 const TIPOS = [
   { tipo: 'relatorio', rotulo: 'Relatório', acao: 'Gerar Relatório' },
@@ -28,7 +28,9 @@ export default function Cliente() {
   const [anexo, setAnexo] = useState({ estado: 'parado', mensagem: '' }); // parado | enviando | ok | erro
   const [arrastando, setArrastando] = useState(false);
   const [editando, setEditando] = useState(false);
-  const [ligados, setLigados] = useState(null); // { tipo: bool } — quais documentos têm workflow no n8n
+  const [ligados, setLigados] = useState(null);
+  const [filtro, setFiltro] = useState('todos'); // todos | tipo
+  const [ocupadoDoc, setOcupadoDoc] = useState(null); // id em exclusão, ou 'perdidos' // { tipo: bool } — quais documentos têm workflow no n8n
   const inputArquivo = useRef(null);
 
   useEffect(() => {
@@ -82,6 +84,34 @@ export default function Cliente() {
     setEditando(false);
   }
 
+  async function excluir(doc) {
+    const rotulo = ROTULOS[doc.tipo] || doc.tipo;
+    if (!window.confirm(`Excluir "${rotulo}" de ${formatarData(doc.criado_em)}? Não dá pra desfazer.`)) return;
+    setOcupadoDoc(doc.id);
+    try {
+      await excluirDocumento(doc.id);
+      setDocumentos((atual) => atual.filter((d) => d.id !== doc.id));
+    } catch (e) {
+      window.alert(`Não deu para excluir: ${e.message}`);
+    } finally {
+      setOcupadoDoc(null);
+    }
+  }
+
+  async function limparPerdidos() {
+    const n = documentos.filter((d) => d.estado === 'perdido').length;
+    if (!window.confirm(`Remover ${n} ${n === 1 ? 'documento perdido' : 'documentos perdidos'}? Eles não têm PDF nem texto salvo, então não há o que recuperar.`)) return;
+    setOcupadoDoc('perdidos');
+    try {
+      await removerPerdidos(id);
+      setDocumentos((atual) => atual.filter((d) => d.estado !== 'perdido'));
+    } catch (e) {
+      window.alert(`Não deu para remover: ${e.message}`);
+    } finally {
+      setOcupadoDoc(null);
+    }
+  }
+
   function soltar(e) {
     e.preventDefault();
     setArrastando(false);
@@ -103,6 +133,15 @@ export default function Cliente() {
     if (tipo === 'relatorio' && !cliente.conta_id) return 'falta ID da conta';
     return null;
   };
+  // derivados da lista de documentos: contagem por tipo, mais recente de cada tipo, perdidos, filtro
+  const contagem = {};
+  const maisRecente = {}; // tipo -> id do mais novo que ainda tem PDF ou texto (a lista vem em ordem decrescente)
+  for (const d of documentos) {
+    contagem[d.tipo] = (contagem[d.tipo] || 0) + 1;
+    if (d.estado !== 'perdido' && !(d.tipo in maisRecente)) maisRecente[d.tipo] = d.id;
+  }
+  const perdidos = documentos.filter((d) => d.estado === 'perdido').length;
+  const visiveis = filtro === 'todos' ? documentos : documentos.filter((d) => d.tipo === filtro);
   const faltando = [
     !cliente.conta_id && 'ID da conta',
     !cliente.setor && 'setor',
@@ -144,21 +183,52 @@ export default function Cliente() {
       </section>
 
       <section className="bloco">
-        <h2>Documentos gerados</h2>
+        <div className="bloco-topo">
+          <h2>Documentos gerados</h2>
+          {perdidos > 0 && (
+            <button type="button" className="link link-erro" disabled={ocupadoDoc !== null} onClick={limparPerdidos}>
+              {ocupadoDoc === 'perdidos' ? 'Removendo…' : `Remover ${perdidos} ${perdidos === 1 ? 'perdido' : 'perdidos'}`}
+            </button>
+          )}
+        </div>
         {documentos.length === 0 ? (
           <p className="vazio">Nenhum documento ainda. Gere o primeiro acima.</p>
         ) : (
-          <ul className="lista-docs">
-            {documentos.map((d) => (
-              <li key={d.id} className={d.id === novoId ? 'doc doc-novo' : 'doc'}>
-                <div>
-                  <span className="doc-tipo">{ROTULOS[d.tipo] || d.tipo}</span>
-                  <span className="doc-data">{formatarData(d.criado_em)}</span>
-                </div>
-                <a className="botao botao-secundario" href={urlDownload(d)}>Baixar PDF</a>
-              </li>
-            ))}
-          </ul>
+          <>
+            <div className="filtros" role="tablist" aria-label="Filtrar por tipo">
+              <button type="button" role="tab" aria-selected={filtro === 'todos'} className={filtro === 'todos' ? 'filtro ativo' : 'filtro'} onClick={() => setFiltro('todos')}>
+                Todos <span className="filtro-n">{documentos.length}</span>
+              </button>
+              {TIPOS.filter((t) => contagem[t.tipo]).map((t) => (
+                <button key={t.tipo} type="button" role="tab" aria-selected={filtro === t.tipo} className={filtro === t.tipo ? 'filtro ativo' : 'filtro'} onClick={() => setFiltro(t.tipo)}>
+                  {t.rotulo} <span className="filtro-n">{contagem[t.tipo]}</span>
+                </button>
+              ))}
+            </div>
+            <ul className="lista-docs">
+              {visiveis.map((d) => (
+                <li key={d.id} className={`doc${d.id === novoId ? ' doc-novo' : ''}${d.estado === 'perdido' ? ' doc-perdido' : ''}`}>
+                  <div className="doc-info">
+                    <span className="doc-tipo">
+                      {ROTULOS[d.tipo] || d.tipo}
+                      {maisRecente[d.tipo] === d.id && <span className="etiqueta etiqueta-ok">mais recente</span>}
+                      {d.estado === 'perdido' && <span className="etiqueta etiqueta-erro">sem arquivo</span>}
+                    </span>
+                    <span className="doc-data">{formatarData(d.criado_em)}</span>
+                  </div>
+                  <div className="doc-acoes">
+                    {d.estado === 'perdido'
+                      ? <span className="doc-nota">PDF perdido — gere de novo</span>
+                      : <a className="botao botao-secundario" href={urlDownload(d)}>Baixar PDF</a>}
+                    <button type="button" className="link link-erro" disabled={ocupadoDoc !== null} onClick={() => excluir(d)} aria-label={`Excluir ${ROTULOS[d.tipo] || d.tipo} de ${formatarData(d.criado_em)}`}>
+                      {ocupadoDoc === d.id ? '…' : 'Excluir'}
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            {visiveis.length === 0 && <p className="vazio">Nenhum documento desse tipo.</p>}
+          </>
         )}
       </section>
 

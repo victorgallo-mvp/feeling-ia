@@ -22,6 +22,8 @@ const comJson = (method, dados) => ({
 export const criarCliente = (dados) => req('/api/clientes', comJson('POST', dados));
 export const atualizarCliente = (id, dados) => req(`/api/clientes/${id}`, comJson('PUT', dados));
 export const listarDocumentos = (id) => req(`/api/clientes/${id}/documentos`);
+export const excluirDocumento = (id) => req(`/api/documentos/${id}`, { method: 'DELETE' });
+export const removerPerdidos = (clienteId) => req(`/api/clientes/${clienteId}/documentos/perdidos`, { method: 'DELETE' });
 export const gerarDocumento = (id, tipo) => req(`/api/clientes/${id}/gerar/${tipo}`, { method: 'POST' });
 
 export function anexarDocumento(id, arquivo) {
