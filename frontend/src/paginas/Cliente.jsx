@@ -57,13 +57,39 @@ export default function Cliente() {
     setGerando(tipo);
     setErroGeracao('');
     try {
-      const doc = await gerarDocumento(id, tipo);
-      setDocumentos((atual) => [doc, ...atual]);
+      const doc = await gerarDocumento(id, tipo); // 202: o documento nasce "gerando"; o n8n avisa quando terminar
+      setDocumentos((atual) => (atual.some((d) => d.id === doc.id) ? atual : [doc, ...atual]));
       setNovoId(doc.id);
     } catch (e) {
       setErroGeracao(`Não deu para gerar: ${e.message}`);
     } finally {
       setGerando(null);
+    }
+  }
+
+  // Enquanto houver documento "gerando", recarrega a lista a cada 5s até o n8n responder.
+  const temGerando = documentos.some((d) => d.estado === 'gerando');
+  useEffect(() => {
+    if (!temGerando) return undefined;
+    const t = setInterval(() => {
+      listarDocumentos(id).then((docs) => setDocumentos((atual) => {
+        // mantém o realce do "novo" quando ele acabou de ficar pronto
+        return docs;
+      })).catch(() => {});
+    }, 5000);
+    return () => clearInterval(t);
+  }, [temGerando, id]);
+
+  async function tentarDeNovo(doc) {
+    setOcupadoDoc(doc.id);
+    try {
+      await excluirDocumento(doc.id);
+      setDocumentos((atual) => atual.filter((d) => d.id !== doc.id));
+      await gerar(doc.tipo);
+    } catch (e) {
+      window.alert(`Não deu para tentar de novo: ${e.message}`);
+    } finally {
+      setOcupadoDoc(null);
     }
   }
 
@@ -165,8 +191,10 @@ export default function Cliente() {
 
   const enviando = anexo.estado === 'enviando';
   // motivo que impede gerar cada tipo (null = pode gerar)
+  const gerandoTipo = (tipo) => documentos.some((d) => d.tipo === tipo && d.estado === 'gerando');
   const bloqueio = (tipo) => {
     if (ligados && ligados[tipo] === false) return 'em breve';
+    if (gerandoTipo(tipo)) return 'gerando';
     if (tipo === 'relatorio' && !cliente.conta_id) return 'falta ID da conta';
     return null;
   };
@@ -175,7 +203,7 @@ export default function Cliente() {
   const maisRecente = {}; // tipo -> id do mais novo que ainda tem PDF ou texto (a lista vem em ordem decrescente)
   for (const d of documentos) {
     contagem[d.tipo] = (contagem[d.tipo] || 0) + 1;
-    if (d.estado !== 'perdido' && !(d.tipo in maisRecente)) maisRecente[d.tipo] = d.id;
+    if (!['perdido', 'gerando', 'erro'].includes(d.estado) && !(d.tipo in maisRecente)) maisRecente[d.tipo] = d.id;
   }
   const perdidos = documentos.filter((d) => d.estado === 'perdido').length;
   const visiveis = filtro === 'todos' ? documentos : documentos.filter((d) => d.tipo === filtro);
@@ -204,11 +232,11 @@ export default function Cliente() {
             <button
               key={t.tipo}
               className="botao"
-              disabled={gerando !== null || bloqueio(t.tipo) !== null}
+              disabled={gerando === t.tipo || bloqueio(t.tipo) !== null}
               onClick={() => gerar(t.tipo)}
             >
-              {gerando === t.tipo ? <><span className="girando" aria-hidden="true" /> Gerando…</> : t.acao}
-              {bloqueio(t.tipo) && <span className="etiqueta">{bloqueio(t.tipo)}</span>}
+              {gerando === t.tipo || gerandoTipo(t.tipo) ? <><span className="girando" aria-hidden="true" /> {t.acao}</> : t.acao}
+              {bloqueio(t.tipo) && bloqueio(t.tipo) !== 'gerando' && <span className="etiqueta">{bloqueio(t.tipo)}</span>}
             </button>
           ))}
         </div>
@@ -218,7 +246,7 @@ export default function Cliente() {
         {!cliente.perfil && !documentos.some((d) => d.tipo === 'reuniao') && (
           <p className="aviso">Cliente sem perfil e sem reunião registrada: os documentos vão sair cheios de "[a confirmar com o cliente]". Suba a transcrição do onboarding em "Reuniões" ou preencha o perfil primeiro.</p>
         )}
-        {gerando && <p className="aviso" role="status">A IA está montando o documento. Isso pode levar até 2 minutos — não feche a página.</p>}
+        {temGerando && <p className="aviso" role="status">A IA está montando o documento. Pode levar alguns minutos; a lista abaixo atualiza sozinha e você pode navegar ou fechar a aba — o documento fica salvo.</p>}
         {erroGeracao && <p className="aviso aviso-erro" role="alert">{erroGeracao}</p>}
       </section>
 
@@ -247,19 +275,24 @@ export default function Cliente() {
             </div>
             <ul className="lista-docs">
               {visiveis.map((d) => (
-                <li key={d.id} className={`doc${d.id === novoId ? ' doc-novo' : ''}${d.estado === 'perdido' ? ' doc-perdido' : ''}`}>
+                <li key={d.id} className={`doc${d.id === novoId && d.estado === 'ok' ? ' doc-novo' : ''}${d.estado === 'perdido' || d.estado === 'erro' ? ' doc-perdido' : ''}`}>
                   <div className="doc-info">
                     <span className="doc-tipo">
                       {ROTULOS[d.tipo] || d.tipo}{d.tipo === 'reuniao' && d.titulo ? ` · ${d.titulo}` : ''}
                       {maisRecente[d.tipo] === d.id && <span className="etiqueta etiqueta-ok">mais recente</span>}
                       {d.estado === 'perdido' && <span className="etiqueta etiqueta-erro">sem arquivo</span>}
+                      {d.estado === 'gerando' && <span className="etiqueta etiqueta-ok"><span className="girando girando-mini" aria-hidden="true" /> gerando</span>}
+                      {d.estado === 'erro' && <span className="etiqueta etiqueta-erro">falhou</span>}
                     </span>
-                    <span className="doc-data">{formatarData(d.criado_em)}</span>
+                    <span className="doc-data">{formatarData(d.criado_em)}{d.estado === 'erro' && d.erro ? ` · ${d.erro}` : ''}</span>
                   </div>
                   <div className="doc-acoes">
-                    {d.estado === 'perdido'
-                      ? <span className="doc-nota">PDF perdido — gere de novo</span>
-                      : <a className="botao botao-secundario" href={urlDownload(d)}>Baixar PDF</a>}
+                    {d.estado === 'gerando' && <span className="doc-nota">aguardando o n8n…</span>}
+                    {d.estado === 'erro' && (
+                      <button type="button" className="botao botao-secundario" disabled={ocupadoDoc !== null || gerandoTipo(d.tipo)} onClick={() => tentarDeNovo(d)}>Tentar de novo</button>
+                    )}
+                    {d.estado === 'perdido' && <span className="doc-nota">PDF perdido — gere de novo</span>}
+                    {(d.estado === 'ok' || d.estado === 'regeneravel') && <a className="botao botao-secundario" href={urlDownload(d)}>Baixar PDF</a>}
                     <button type="button" className="link link-erro" disabled={ocupadoDoc !== null} onClick={() => excluir(d)} aria-label={`Excluir ${ROTULOS[d.tipo] || d.tipo} de ${formatarData(d.criado_em)}`}>
                       {ocupadoDoc === d.id ? '…' : 'Excluir'}
                     </button>

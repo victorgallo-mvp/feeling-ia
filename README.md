@@ -72,6 +72,10 @@ Todo webhook de geração recebe `cliente_id`; os workflows do n8n resolvem o cl
 
 `conta_id` tem que ser idêntico ao do Sentinel (`metricas_serie_temporal.conta_id`): valor errado não dá erro, o relatório só sai sem números.
 
+## Geração assíncrona
+
+`POST /api/clientes/:id/gerar/:tipo` responde **202** na hora com o documento em `estado: "gerando"`. O cockpit manda ao webhook, além dos dados do cliente, `documento_id`, `callback_url` e `callback_token`; o workflow responde `{ "aceito": true }` imediatamente e, ao terminar, faz `POST callback_url` com header `X-Cockpit-Token` e corpo `{ "markdown": "..." }` (ou `{ "erro": "..." }`). O cockpit gera o PDF e marca `ok`/`erro`; sem callback em 12 minutos vira `erro`. A tela consulta a lista a cada 5s enquanto houver documento gerando. Compatibilidade: se o webhook responder `{ markdown }` direto (modo antigo), o cockpit também conclui.
+
 ## Contrato dos webhooks de geração
 
 `POST` com JSON; o workflow responde `{ "markdown": "..." }` em até 120s.

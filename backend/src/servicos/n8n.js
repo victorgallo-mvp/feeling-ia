@@ -17,7 +17,10 @@ const WEBHOOKS_EXTRA = {
 const tiposConfigurados = () =>
   Object.fromEntries([...Object.entries(WEBHOOKS), ...Object.entries(WEBHOOKS_EXTRA)].map(([tipo, url]) => [tipo, Boolean(url)]));
 
-// `dados` vai inteiro no corpo: sempre { conta_id, cliente_nome }, mais o que o tipo precisar.
+// Dispara o workflow. `dados` vai inteiro no corpo (conta_id, cliente_nome, cliente_id, ... e, no modo
+// assíncrono, callback_url + callback_token). Devolve:
+//   { modo: 'assincrono' }            -> o workflow aceitou e vai chamar o callback quando terminar
+//   { modo: 'sincrono', markdown }    -> workflow antigo, que ainda responde com o texto na hora
 async function gerarViaN8n(tipo, dados) {
   const url = WEBHOOKS[tipo];
   if (!url) throw new Error(`Webhook não configurado para tipo: ${tipo}`);
@@ -25,13 +28,13 @@ async function gerarViaN8n(tipo, dados) {
   const resp = await axios.post(
     url,
     dados,
-    { timeout: 175000, headers: { 'Content-Type': 'application/json' } } // pesquisa chega a ~120s; o servidor aceita até 180s
+    { timeout: 175000, headers: { 'Content-Type': 'application/json' } } // compat: workflow síncrono pode demorar
   );
 
-  // O workflow responde { markdown: "..." } (via nó Respond to Webhook).
   const markdown = resp.data?.markdown ?? resp.data?.output ?? resp.data?.relatorio;
-  if (!markdown) throw new Error('n8n não devolveu markdown. Resposta: ' + JSON.stringify(resp.data).slice(0, 300));
-  return markdown;
+  if (markdown) return { modo: 'sincrono', markdown };
+  if (resp.data?.aceito) return { modo: 'assincrono' };
+  throw new Error('n8n não aceitou nem devolveu markdown. Resposta: ' + JSON.stringify(resp.data).slice(0, 300));
 }
 
 async function anexarViaN8n(fileBuffer, filename, { conta_id, cliente_nome, cliente_id, titulo, tipo }) {

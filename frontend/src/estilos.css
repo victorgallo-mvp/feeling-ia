@@ -106,6 +106,7 @@ h2 {
   animation: girar 0.7s linear infinite;
 }
 @keyframes girar { to { transform: rotate(360deg); } }
+.girando-mini { width: 9px; height: 9px; border-width: 1.5px; display: inline-block; vertical-align: middle; margin-right: 4px; }
 
 .aviso {
   margin: 14px 0 0; padding: 10px 14px; border-radius: 6px; font-size: 13.5px;
