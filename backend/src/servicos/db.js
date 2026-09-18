@@ -38,6 +38,7 @@ async function migrar() {
     ALTER TABLE clientes ADD COLUMN IF NOT EXISTS instagram TEXT;      -- handle, sem @
     ALTER TABLE clientes ADD COLUMN IF NOT EXISTS site TEXT;
     ALTER TABLE clientes ADD COLUMN IF NOT EXISTS google_ads_id TEXT;  -- 123-456-7890
+    ALTER TABLE clientes ADD COLUMN IF NOT EXISTS orientacoes TEXT;    -- instruções da equipe pra IA (curto)
   `);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS documentos_gerados (

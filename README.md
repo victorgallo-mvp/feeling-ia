@@ -55,6 +55,7 @@ Cada documento tem um `estado`: `ok` (PDF no storage), `regeneravel` (PDF sumiu 
 | nome, setor, cidade, `conta_id` | colunas de `clientes` | n8n por SQL (valor exato) |
 | `instagram` (handle sem @), `site` (com https://), `google_ads_id` (123-456-7890) | colunas de `clientes` | vão no corpo de todo webhook de geração |
 | perfil (público, diferenciais, ticket…) | `clientes.perfil` (texto, editar substitui) | n8n injeta direto no prompt de pesquisa/briefing |
+| orientações para a IA (foco do momento, o que evitar, tom) | `clientes.orientacoes` (até 1.500 caracteres) | bloco fixo "Orientações da equipe" nos 4 workflows — nunca vai pro cérebro |
 | documentos longos (PDF/DOCX/TXT) | tabela `cerebro` via upload (metadata `cliente_id`, `titulo`, `tipo` — o webhook aceita `tipo`, padrão `anexo`) | n8n por busca semântica filtrada por `cliente_id` |
 
 Todo webhook de geração recebe `cliente_id`; os workflows do n8n resolvem o cliente por ele (fallback: nome). O cérebro é filtrado por `metadata.cliente_id`.

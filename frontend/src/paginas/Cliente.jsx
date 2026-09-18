@@ -249,6 +249,7 @@ export default function Cliente() {
               <div><dt>Site</dt><dd>{cliente.site ? <a href={cliente.site} target="_blank" rel="noreferrer">{cliente.site.replace(/^https?:\/\//, '')}</a> : '—'}</dd></div>
               <div><dt>ID do Google Ads</dt><dd>{cliente.google_ads_id ? <code>{cliente.google_ads_id}</code> : '—'}</dd></div>
               <div className="ficha-larga"><dt>Perfil</dt><dd className="ficha-perfil">{cliente.perfil || '—'}</dd></div>
+              <div className="ficha-larga"><dt>Orientações para a IA</dt><dd className="ficha-perfil">{cliente.orientacoes || '—'}</dd></div>
             </dl>
             {faltando.length > 0 && (
               <p className="aviso">Falta preencher: {faltando.join(', ')}. Quanto mais completo, menos "[a confirmar com o cliente]" nos documentos.</p>

@@ -175,6 +175,7 @@ code {
 }
 .form-campo ::placeholder { color: #9aa4b5; }
 .form-ajuda { margin: 6px 0 0; font-size: 12.5px; color: var(--texto-suave); }
+.form-opcional { font-weight: 400; color: var(--texto-suave); }
 .form-acoes { margin-top: 20px; }
 
 @media (max-width: 640px) {

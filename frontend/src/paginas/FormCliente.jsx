@@ -12,7 +12,12 @@ Verba mensal de mídia:
 Tom de voz:
 Observações:`;
 
-const VAZIO = { nome: '', setor: '', cidade: '', conta_id: '', perfil: '', instagram: '', site: '', google_ads_id: '' };
+const VAZIO = { nome: '', setor: '', cidade: '', conta_id: '', perfil: '', instagram: '', site: '', google_ads_id: '', orientacoes: '' };
+
+const EXEMPLO_ORIENTACOES = `Ex.: Foco deste mês é a campanha de Dia das Mães.
+Não citar o concorrente X nos documentos.
+Tom mais formal; o cliente não gosta de gíria.
+Não falar de preço — o cliente prefere tratar no atendimento.`;
 
 // Formulário de criar/editar cliente. `aoSalvar(dados)` deve devolver uma Promise.
 export default function FormCliente({ inicial, rotuloSalvar, aoSalvar, aoCancelar }) {
@@ -102,6 +107,13 @@ export default function FormCliente({ inicial, rotuloSalvar, aoSalvar, aoCancela
           <textarea {...campo('perfil')} rows={11} placeholder={ROTEIRO} />
           <p className="form-ajuda">
             O que a equipe sabe sobre o cliente. A IA usa esse texto na pesquisa e no briefing. Documentos longos vão pelo upload.
+          </p>
+        </div>
+        <div className="form-campo form-campo-largo">
+          <label htmlFor="campo-orientacoes">Orientações para a IA <span className="form-opcional">(opcional)</span></label>
+          <textarea {...campo('orientacoes')} rows={4} maxLength={1500} placeholder={EXEMPLO_ORIENTACOES} />
+          <p className="form-ajuda">
+            Instruções, não informações: foco do momento, o que evitar, tom de voz. Entram em todos os documentos deste cliente. Até 1.500 caracteres.
           </p>
         </div>
       </div>

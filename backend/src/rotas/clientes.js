@@ -3,8 +3,9 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../servicos/db');
 
-const CAMPOS = 'id, nome, setor, cidade, conta_id, perfil, instagram, site, google_ads_id';
+const CAMPOS = 'id, nome, setor, cidade, conta_id, perfil, instagram, site, google_ads_id, orientacoes';
 const LIMITE_PERFIL = 20000;
+const LIMITE_ORIENTACOES = 1500; // é instrução, não documento: curto pra entrar inteiro em todo prompt
 
 // Normaliza o corpo de criar/editar. Devolve { dados } ou { erro }.
 function lerCliente(body) {
@@ -18,11 +19,14 @@ function lerCliente(body) {
     instagram: texto(body?.instagram),
     site: texto(body?.site),
     google_ads_id: texto(body?.google_ads_id),
+    orientacoes: texto(body?.orientacoes),
   };
   if (!dados.nome) return { erro: 'nome é obrigatório' };
   if (dados.conta_id && /\s/.test(dados.conta_id)) return { erro: 'conta_id não pode ter espaços' };
   if (dados.perfil && dados.perfil.length > LIMITE_PERFIL)
     return { erro: `perfil passa de ${LIMITE_PERFIL} caracteres — documentos longos vão pelo upload` };
+  if (dados.orientacoes && dados.orientacoes.length > LIMITE_ORIENTACOES)
+    return { erro: `orientações passam de ${LIMITE_ORIENTACOES} caracteres — seja direto; contexto longo vai no perfil ou no upload` };
 
   if (dados.instagram) {
     // aceita "@feeling", "feeling" ou a URL do perfil; guarda só o handle
@@ -47,7 +51,7 @@ function lerCliente(body) {
   return { dados };
 }
 
-const VALORES = (d) => [d.nome, d.setor, d.cidade, d.conta_id, d.perfil, d.instagram, d.site, d.google_ads_id];
+const VALORES = (d) => [d.nome, d.setor, d.cidade, d.conta_id, d.perfil, d.instagram, d.site, d.google_ads_id, d.orientacoes];
 
 function responderErro(res, e) {
   if (e.code === '23505') return res.status(409).json({ erro: 'já existe um cliente com esse nome' });
@@ -82,8 +86,8 @@ router.post('/clientes', async (req, res) => {
   if (erro) return res.status(400).json({ erro });
   try {
     const { rows } = await pool.query(
-      `INSERT INTO clientes (nome, setor, cidade, conta_id, perfil, instagram, site, google_ads_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING ${CAMPOS}`,
+      `INSERT INTO clientes (nome, setor, cidade, conta_id, perfil, instagram, site, google_ads_id, orientacoes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING ${CAMPOS}`,
       VALORES(dados)
     );
     res.status(201).json(rows[0]);
@@ -98,8 +102,8 @@ router.put('/clientes/:id', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `UPDATE clientes SET nome=$1, setor=$2, cidade=$3, conta_id=$4, perfil=$5,
-         instagram=$6, site=$7, google_ads_id=$8
-       WHERE id = $9 RETURNING ${CAMPOS}`,
+         instagram=$6, site=$7, google_ads_id=$8, orientacoes=$9
+       WHERE id = $10 RETURNING ${CAMPOS}`,
       [...VALORES(dados), req.params.id]
     );
     if (!rows.length) return res.status(404).json({ erro: 'cliente não encontrado' });
