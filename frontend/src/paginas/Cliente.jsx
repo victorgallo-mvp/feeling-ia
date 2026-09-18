@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import FormCliente from './FormCliente.jsx';
+import Reunioes from './Reunioes.jsx';
 import { anexarDocumento, atualizarCliente, buscarCliente, excluirAnexo, excluirCliente, excluirDocumento, gerarDocumento, listarAnexos, listarDocumentos, listarTipos, removerPerdidos, resumoExclusao, urlDownload } from '../api.js';
 
 const TIPOS = [
@@ -9,7 +10,7 @@ const TIPOS = [
   { tipo: 'briefing', rotulo: 'Briefing', acao: 'Gerar Briefing' },
   { tipo: 'analise', rotulo: 'Análise de Presença Digital', acao: 'Analisar Presença Digital' },
 ];
-const ROTULOS = Object.fromEntries(TIPOS.map((t) => [t.tipo, t.rotulo]));
+const ROTULOS = { ...Object.fromEntries(TIPOS.map((t) => [t.tipo, t.rotulo])), reuniao: 'Reunião' };
 const ABRANGENCIA = { local: 'Local (cidade e região)', regional: 'Regional', nacional: 'Nacional' };
 
 // mesmo filtro do backend (rotas/anexar.js)
@@ -235,7 +236,7 @@ export default function Cliente() {
               <button type="button" role="tab" aria-selected={filtro === 'todos'} className={filtro === 'todos' ? 'filtro ativo' : 'filtro'} onClick={() => setFiltro('todos')}>
                 Todos <span className="filtro-n">{documentos.length}</span>
               </button>
-              {TIPOS.filter((t) => contagem[t.tipo]).map((t) => (
+              {[...TIPOS, { tipo: 'reuniao', rotulo: 'Reunião' }].filter((t) => contagem[t.tipo]).map((t) => (
                 <button key={t.tipo} type="button" role="tab" aria-selected={filtro === t.tipo} className={filtro === t.tipo ? 'filtro ativo' : 'filtro'} onClick={() => setFiltro(t.tipo)}>
                   {t.rotulo} <span className="filtro-n">{contagem[t.tipo]}</span>
                 </button>
@@ -246,7 +247,7 @@ export default function Cliente() {
                 <li key={d.id} className={`doc${d.id === novoId ? ' doc-novo' : ''}${d.estado === 'perdido' ? ' doc-perdido' : ''}`}>
                   <div className="doc-info">
                     <span className="doc-tipo">
-                      {ROTULOS[d.tipo] || d.tipo}
+                      {ROTULOS[d.tipo] || d.tipo}{d.tipo === 'reuniao' && d.titulo ? ` · ${d.titulo}` : ''}
                       {maisRecente[d.tipo] === d.id && <span className="etiqueta etiqueta-ok">mais recente</span>}
                       {d.estado === 'perdido' && <span className="etiqueta etiqueta-erro">sem arquivo</span>}
                     </span>
@@ -294,6 +295,16 @@ export default function Cliente() {
           </>
         )}
       </section>
+
+      <Reunioes
+        clienteId={id}
+        cliente={cliente}
+        documentos={documentos}
+        ligado={!ligados || ligados.reuniao !== false}
+        aoNovoDocumento={(doc) => { setDocumentos((atual) => [doc, ...atual]); setNovoId(doc.id); }}
+        aoAtualizarDocumento={(doc) => setDocumentos((atual) => atual.map((d) => (d.id === doc.id ? doc : d)))}
+        aoAtualizarCliente={setCliente}
+      />
 
       <section className="bloco">
         <h2>Anexar documento pra alimentar a IA</h2>

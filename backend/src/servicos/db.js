@@ -52,6 +52,8 @@ async function migrar() {
     );
     -- markdown devolvido pelo n8n: deixa o briefing ler a última pesquisa por SQL
     ALTER TABLE documentos_gerados ADD COLUMN IF NOT EXISTS markdown TEXT;
+    -- extras: dados por tipo (reunião: titulo, data_reuniao, transcricao, sugestoes, aplicadas)
+    ALTER TABLE documentos_gerados ADD COLUMN IF NOT EXISTS extras JSONB;
   `);
 }
 

@@ -48,6 +48,10 @@ npm run dev               # http://localhost:5173
 
 Cada documento tem um `estado`: `ok` (PDF no storage), `regeneravel` (PDF sumiu num deploy sem volume, mas o `markdown` está no banco — o download regenera) ou `perdido` (sem PDF e sem texto). A tela filtra por tipo, marca o mais recente de cada tipo, exclui um a um (`DELETE /api/documentos/:id`) e remove os perdidos de uma vez (`DELETE /api/clientes/:id/documentos/perdidos`).
 
+## Reuniões
+
+`POST /api/clientes/:id/reunioes` (multipart: `arquivo` TXT/MD/DOCX/PDF, `titulo`, `data_reuniao` opcionais) → o cockpit extrai o texto, o n8n (`N8N_WEBHOOK_REUNIAO`) devolve `{ markdown, sugestoes }` → vira documento `reuniao` (PDF + markdown + `extras`), só o resumo é indexado no cérebro (`tipo: reuniao`), a transcrição bruta fica no storage (`GET /api/documentos/:id/transcricao`). As sugestões de cadastro são aplicadas pela pessoa (`PUT /api/clientes/:id`) e registradas em `PATCH /api/documentos/:id/sugestoes`.
+
 ## Exclusões
 
 - `DELETE /api/clientes/:id/anexos?titulo=...` tira um arquivo do cérebro (todos os chunks daquele título).

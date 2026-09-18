@@ -19,7 +19,9 @@ const comLinks = (d) => ({ ...d, url_download: `/api/documentos/${d.id}/download
 router.get('/clientes/:id/documentos', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT id, tipo, criado_em, caminho, (markdown IS NOT NULL) AS tem_markdown
+      `SELECT id, tipo, criado_em, caminho, (markdown IS NOT NULL) AS tem_markdown,
+              extras->>'titulo' AS titulo, extras->>'data_reuniao' AS data_reuniao,
+              extras->'sugestoes' AS sugestoes, COALESCE(extras->'aplicadas', '[]'::jsonb) AS aplicadas
        FROM documentos_gerados WHERE cliente_id = $1 ORDER BY criado_em DESC, id DESC`,
       [req.params.id]
     );

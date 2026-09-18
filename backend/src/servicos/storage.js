@@ -17,6 +17,14 @@ async function salvarPdf(buffer, clienteId, tipo) {
   return nome;
 }
 
+// Guarda um arquivo qualquer (ex.: transcrição bruta) e devolve o nome gravado.
+async function salvarArquivo(buffer, nome) {
+  await fs.mkdir(STORAGE_DIR, { recursive: true });
+  const seguro = `${Date.now()}_${path.basename(nome).replace(/[^\w.-]+/g, '-')}`;
+  await fs.writeFile(path.join(STORAGE_DIR, seguro), buffer);
+  return seguro;
+}
+
 async function lerPdf(caminho) {
   return fs.readFile(caminhoAbsoluto(caminho));
 }
@@ -32,4 +40,4 @@ async function apagarPdf(caminho) {
   await fs.unlink(caminhoAbsoluto(caminho)).catch((e) => { if (e.code !== 'ENOENT') throw e; });
 }
 
-module.exports = { salvarPdf, lerPdf, existePdf, apagarPdf, STORAGE_DIR };
+module.exports = { salvarPdf, salvarArquivo, lerPdf, existePdf, apagarPdf, STORAGE_DIR };

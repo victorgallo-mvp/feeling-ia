@@ -17,8 +17,10 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "form-data": "^4.0.1",
+    "mammoth": "^1.12.3",
     "marked": "^15.0.6",
     "multer": "^2.0.2",
+    "pdfjs-dist": "^6.3.289",
     "pg": "^8.13.1",
     "puppeteer": "^24.1.0"
   }

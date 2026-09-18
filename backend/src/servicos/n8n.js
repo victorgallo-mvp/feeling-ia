@@ -8,10 +8,14 @@ const WEBHOOKS = {
   briefing:  process.env.N8N_WEBHOOK_BRIEFING,
   analise:   process.env.N8N_WEBHOOK_PRESENCA, // Análise de Presença Digital
 };
+// Documentos que não nascem de um botão "gerar" (o cockpit chama de outro jeito)
+const WEBHOOKS_EXTRA = {
+  reuniao: process.env.N8N_WEBHOOK_REUNIAO, // resumo de transcrição de reunião
+};
 
 // Quais tipos têm workflow ligado — o painel usa pra mostrar "em breve" nos que faltam.
 const tiposConfigurados = () =>
-  Object.fromEntries(Object.entries(WEBHOOKS).map(([tipo, url]) => [tipo, Boolean(url)]));
+  Object.fromEntries([...Object.entries(WEBHOOKS), ...Object.entries(WEBHOOKS_EXTRA)].map(([tipo, url]) => [tipo, Boolean(url)]));
 
 // `dados` vai inteiro no corpo: sempre { conta_id, cliente_nome }, mais o que o tipo precisar.
 async function gerarViaN8n(tipo, dados) {
@@ -30,7 +34,7 @@ async function gerarViaN8n(tipo, dados) {
   return markdown;
 }
 
-async function anexarViaN8n(fileBuffer, filename, { conta_id, cliente_nome, cliente_id, titulo }) {
+async function anexarViaN8n(fileBuffer, filename, { conta_id, cliente_nome, cliente_id, titulo, tipo }) {
   const url = process.env.N8N_WEBHOOK_ANEXAR;
   if (!url) throw new Error('N8N_WEBHOOK_ANEXAR não configurado');
   const FormData = require('form-data');
@@ -40,8 +44,20 @@ async function anexarViaN8n(fileBuffer, filename, { conta_id, cliente_nome, clie
   form.append('cliente_nome', cliente_nome || '');
   form.append('cliente_id', cliente_id != null ? String(cliente_id) : ''); // metadata pra filtrar o cérebro por cliente
   form.append('titulo', titulo || filename); // nome original do arquivo, vira metadata no cérebro
+  if (tipo) form.append('tipo', tipo); // metadata.tipo no cérebro (padrão do workflow: anexo)
   await axios.post(url, form, { timeout: 120000, headers: form.getHeaders() });
   return { ok: true };
 }
 
-module.exports = { gerarViaN8n, anexarViaN8n, tiposConfigurados };
+// Resumo de reunião: manda a transcrição em texto e recebe { markdown, sugestoes }.
+async function resumirReuniaoViaN8n({ cliente_id, cliente_nome, conta_id, titulo, data_reuniao, texto }) {
+  const url = WEBHOOKS_EXTRA.reuniao;
+  if (!url) throw new Error('N8N_WEBHOOK_REUNIAO não configurado');
+  const resp = await axios.post(url, { cliente_id, cliente_nome, conta_id, titulo, data_reuniao, texto },
+    { timeout: 170000, headers: { 'Content-Type': 'application/json' } });
+  const markdown = resp.data?.markdown;
+  if (!markdown) throw new Error('n8n não devolveu o resumo. Resposta: ' + JSON.stringify(resp.data).slice(0, 300));
+  return { markdown, sugestoes: resp.data?.sugestoes ?? null };
+}
+
+module.exports = { gerarViaN8n, anexarViaN8n, resumirReuniaoViaN8n, tiposConfigurados };

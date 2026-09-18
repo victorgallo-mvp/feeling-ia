@@ -36,5 +36,15 @@ export function anexarDocumento(id, arquivo) {
   return req(`/api/clientes/${id}/anexar`, { method: 'POST', body: form });
 }
 
+export function enviarReuniao(id, arquivo, { titulo, data_reuniao } = {}) {
+  const form = new FormData();
+  form.append('arquivo', arquivo);
+  if (titulo) form.append('titulo', titulo);
+  if (data_reuniao) form.append('data_reuniao', data_reuniao);
+  return req(`/api/clientes/${id}/reunioes`, { method: 'POST', body: form });
+}
+export const registrarSugestoes = (docId, dados) => req(`/api/documentos/${docId}/sugestoes`, comJson('PATCH', dados));
+export const urlTranscricao = (doc) => `${API_URL}/api/documentos/${doc.id}/transcricao`;
+
 // url_download vem relativa do backend (/api/documentos/:id/download)
 export const urlDownload = (doc) => API_URL + doc.url_download;

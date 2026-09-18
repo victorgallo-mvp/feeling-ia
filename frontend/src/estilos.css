@@ -216,6 +216,18 @@ code {
 }
 .form-campo select:focus-visible { outline: 2px solid var(--petroleo); outline-offset: 1px; border-color: transparent; }
 
+/* Reuniões e sugestões */
+.reuniao-campos { margin-bottom: 12px; }
+.sugestoes { margin-top: 18px; padding: 16px 18px; border: 1px solid #cfe3e0; border-radius: 8px; background: #f3f9f8; }
+.sugestoes h3 { margin: 0; font-size: 15px; color: var(--marinho); }
+.sugestoes-resumo { margin: 8px 0 0; font-size: 13.5px; color: var(--texto-suave); }
+.lista-sugestoes { list-style: none; margin: 12px 0; padding: 0; }
+.sugestao { display: grid; grid-template-columns: auto 110px 1fr; gap: 10px; align-items: start; padding: 7px 0; border-top: 1px solid #dfe9e7; cursor: pointer; font-size: 14px; }
+.sugestao input { margin-top: 3px; }
+.sugestao-rotulo { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--texto-suave); padding-top: 2px; }
+.sugestao-valor { overflow-wrap: anywhere; }
+@media (max-width: 520px) { .sugestao { grid-template-columns: auto 1fr; } .sugestao-valor { grid-column: 2; } }
+
 /* Documentos */
 .lista-docs { list-style: none; margin: 0; padding: 0; }
 .doc {
