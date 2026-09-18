@@ -53,6 +53,8 @@ npm run dev               # http://localhost:5173
 | perfil (público, diferenciais, ticket…) | `clientes.perfil` (texto, editar substitui) | n8n injeta direto no prompt de pesquisa/briefing |
 | documentos longos (PDF/DOCX/TXT) | tabela `cerebro` via upload | n8n por busca semântica (RAG) |
 
+Todo webhook de geração recebe `cliente_id`; os workflows do n8n resolvem o cliente por ele (fallback: nome). O cérebro é filtrado por `metadata.cliente_id`.
+
 `conta_id` tem que ser idêntico ao do Sentinel (`metricas_serie_temporal.conta_id`): valor errado não dá erro, o relatório só sai sem números.
 
 ## Contrato dos webhooks de geração
