@@ -51,7 +51,7 @@ npm run dev               # http://localhost:5173
 | nome, setor, cidade, `conta_id` | colunas de `clientes` | n8n por SQL (valor exato) |
 | `instagram` (handle sem @), `site` (com https://), `google_ads_id` (123-456-7890) | colunas de `clientes` | vão no corpo de todo webhook de geração |
 | perfil (público, diferenciais, ticket…) | `clientes.perfil` (texto, editar substitui) | n8n injeta direto no prompt de pesquisa/briefing |
-| documentos longos (PDF/DOCX/TXT) | tabela `cerebro` via upload | n8n por busca semântica (RAG) |
+| documentos longos (PDF/DOCX/TXT) | tabela `cerebro` via upload (metadata `cliente_id`, `titulo`, `tipo` — o webhook aceita `tipo`, padrão `anexo`) | n8n por busca semântica filtrada por `cliente_id` |
 
 Todo webhook de geração recebe `cliente_id`; os workflows do n8n resolvem o cliente por ele (fallback: nome). O cérebro é filtrado por `metadata.cliente_id`.
 
