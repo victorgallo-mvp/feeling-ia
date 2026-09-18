@@ -215,6 +215,9 @@ export default function Cliente() {
         {!cliente.cidade && !cliente.instagram && !cliente.site && (
           <p className="aviso">Sem cidade, Instagram ou site no cadastro, a análise de presença digital busca só pelo nome e pode achar um homônimo.</p>
         )}
+        {!cliente.perfil && !documentos.some((d) => d.tipo === 'reuniao') && (
+          <p className="aviso">Cliente sem perfil e sem reunião registrada: os documentos vão sair cheios de "[a confirmar com o cliente]". Suba a transcrição do onboarding em "Reuniões" ou preencha o perfil primeiro.</p>
+        )}
         {gerando && <p className="aviso" role="status">A IA está montando o documento. Isso pode levar até 2 minutos — não feche a página.</p>}
         {erroGeracao && <p className="aviso aviso-erro" role="alert">{erroGeracao}</p>}
       </section>

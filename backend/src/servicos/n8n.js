@@ -25,7 +25,7 @@ async function gerarViaN8n(tipo, dados) {
   const resp = await axios.post(
     url,
     dados,
-    { timeout: 120000, headers: { 'Content-Type': 'application/json' } }
+    { timeout: 175000, headers: { 'Content-Type': 'application/json' } } // pesquisa chega a ~120s; o servidor aceita até 180s
   );
 
   // O workflow responde { markdown: "..." } (via nó Respond to Webhook).
