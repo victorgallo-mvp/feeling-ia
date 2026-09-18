@@ -1,10 +1,25 @@
 // src/servicos/texto.js
-// Extrai texto de PDF com o pdf.js (Mozilla). O extrator do n8n e o Poppler antigo do Debian
-// perdem letras em PDFs com certas fontes embutidas; o pdf.js atual lê certo.
+// Extrai texto de PDF com o pdf.js (Mozilla). O extrator do n8n perde letras em PDFs com certas
+// fontes embutidas; o pdf.js atual lê certo. Devolve { texto, avisos } — avisos são os warnings
+// do pdf.js durante a extração (ajudam a diagnosticar diferenças entre ambientes).
+const path = require('path');
+
 async function extrairTextoPdf(buffer) {
+  const avisos = [];
+  const logOriginal = console.log, warnOriginal = console.warn;
+  const captura = (...a) => { const m = a.map(String).join(' '); if (/warn|error|fail/i.test(m)) avisos.push(m.slice(0, 200)); };
+  console.log = captura; console.warn = captura;
   try {
     const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-    const doc = await pdfjs.getDocument({ data: new Uint8Array(buffer), isEvalSupported: false }).promise;
+    const raiz = path.dirname(require.resolve('pdfjs-dist/package.json'));
+    const doc = await pdfjs.getDocument({
+      data: new Uint8Array(buffer),
+      isEvalSupported: false,
+      useSystemFonts: false,
+      standardFontDataUrl: path.join(raiz, 'standard_fonts') + path.sep,
+      cMapUrl: path.join(raiz, 'cmaps') + path.sep,
+      cMapPacked: true,
+    }).promise;
     const paginas = [];
     for (let i = 1; i <= doc.numPages; i++) {
       const conteudo = await (await doc.getPage(i)).getTextContent();
@@ -26,10 +41,13 @@ async function extrairTextoPdf(buffer) {
       paginas.push(texto);
     }
     await doc.cleanup?.();
-    return paginas.join('\n\n').replace(/[ \t]+\n/g, '\n').replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+    const texto = paginas.join('\n\n').replace(/[ \t]+\n/g, '\n').replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+    return { texto, avisos, versao: pdfjs.version };
   } catch (e) {
-    console.warn('[texto] falha ao extrair PDF:', e.message);
-    return '';
+    avisos.push('falha: ' + e.message);
+    return { texto: '', avisos };
+  } finally {
+    console.log = logOriginal; console.warn = warnOriginal;
   }
 }
 

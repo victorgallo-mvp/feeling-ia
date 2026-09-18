@@ -41,16 +41,17 @@ router.post('/clientes/:id/anexar', (req, res) => {
 
       // O extrator de PDF do n8n perde letras em alguns arquivos (fontes embutidas); extraímos aqui
       // com o pdf.js e mandamos texto puro, guardando o nome original como título.
-      let conteudo = req.file.buffer, nomeEnvio = nome;
+      let conteudo = req.file.buffer, nomeEnvio = nome, extracao;
       if (path.extname(nome).toLowerCase() === '.pdf') {
-        const texto = await extrairTextoPdf(req.file.buffer);
+        const { texto, avisos, versao } = await extrairTextoPdf(req.file.buffer);
+        extracao = { caracteres: texto.length, amostra: texto.slice(0, 120), avisos, versao, node: process.version };
         if (texto) { conteudo = Buffer.from(texto, 'utf8'); nomeEnvio = nome.replace(/\.pdf$/i, '.txt'); }
-        else console.warn(`[anexar] não extraí texto de "${nome}" — enviando o PDF como está`);
+        else console.warn(`[anexar] não extraí texto de "${nome}" — enviando o PDF como está`, avisos);
       }
       await anexarViaN8n(conteudo, nomeEnvio, {
         conta_id: cliente.conta_id, cliente_nome: cliente.nome, cliente_id: cliente.id, titulo: nome,
       });
-      res.json({ ok: true });
+      res.json({ ok: true, ...(extracao ? { extracao } : {}) });
     } catch (e) {
       console.error(e);
       res.status(500).json({ erro: e.message });
