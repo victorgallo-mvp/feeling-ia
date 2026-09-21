@@ -35,7 +35,17 @@ async function concluir(docId, markdown) {
   return doc;
 }
 
+// O n8n perde o detalhe do erro da API quando "continua em caso de erro"; traduz o genérico em algo acionável.
+function explicarErro(mensagem) {
+  const m = String(mensagem || '');
+  if (/bad request/i.test(m)) return 'A chamada ao Claude falhou (Bad request). Causas comuns: limite mensal de gasto da API atingido ou chave inválida — confira em console.anthropic.com → Limits e a execução no n8n.';
+  if (/rate limit|429/i.test(m)) return 'A API do Claude recusou por excesso de chamadas (rate limit). Tente de novo em um minuto.';
+  if (/timeout|timed out/i.test(m)) return 'O n8n não terminou a tempo (timeout). Tente de novo.';
+  return m;
+}
+
 async function falhar(docId, mensagem) {
+  mensagem = explicarErro(mensagem);
   await pool.query(`UPDATE documentos_gerados SET estado = 'erro', erro = $2 WHERE id = $1 AND estado <> 'ok'`, [docId, String(mensagem).slice(0, 500)]);
 }
 
