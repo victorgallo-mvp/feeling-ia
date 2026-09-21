@@ -12,6 +12,7 @@ const { extrairTexto } = require('../servicos/texto');
 
 const EXTENSOES = ['.pdf', '.docx', '.txt']; // o que o workflow de ingestão aceita
 const LIMITE_MB = 25;
+const TIPOS_ANEXO = ['anexo', 'relatorio_semanal'];
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -40,13 +41,18 @@ router.post('/clientes/:id/anexar', (req, res) => {
       if (!rows.length) return res.status(404).json({ erro: 'cliente não encontrado' });
       const cliente = rows[0];
 
+      // tipo: 'anexo' (documento do cliente) ou 'relatorio_semanal' (histórico de desempenho, sem extração de cadastro —
+      // números da semana não são perfil). titulo opcional substitui o nome do arquivo no cérebro.
+      const tipo = TIPOS_ANEXO.includes(req.body?.tipo) ? req.body.tipo : 'anexo';
+      const titulo = (typeof req.body?.titulo === 'string' && req.body.titulo.trim()) ? req.body.titulo.trim().slice(0, 200) : nome;
+
       await anexarViaN8n(req.file.buffer, nome, {
-        conta_id: cliente.conta_id, cliente_nome: cliente.nome, cliente_id: cliente.id, titulo: nome,
+        conta_id: cliente.conta_id, cliente_nome: cliente.nome, cliente_id: cliente.id, titulo, tipo,
       });
 
       // Opcional (padrão ligado): o mesmo agente das reuniões lê o documento e sugere cadastro.
       let sugestoes = null, aviso = null;
-      const extrair = req.body?.extrair !== 'false' && req.body?.extrair !== '0';
+      const extrair = tipo === 'anexo' && req.body?.extrair !== 'false' && req.body?.extrair !== '0';
       if (extrair && tiposConfigurados().reuniao) {
         try {
           const texto = await extrairTexto(req.file.buffer, nome);

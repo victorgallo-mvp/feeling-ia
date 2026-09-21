@@ -32,6 +32,8 @@ export default function Cliente() {
   const [anexo, setAnexo] = useState({ estado: 'parado', mensagem: '' }); // parado | enviando | ok | erro
   const [arrastando, setArrastando] = useState(false);
   const [extrair, setExtrair] = useState(true); // sugerir cadastro a partir do anexo
+  const [tipoAnexo, setTipoAnexo] = useState('anexo'); // anexo (documento do cliente) | relatorio_semanal
+  const [periodoRelatorio, setPeriodoRelatorio] = useState(''); // ex.: "14 a 20/09/2026" — vira o título do relatório no cérebro
   const [editando, setEditando] = useState(false);
   const [ligados, setLigados] = useState(null);
   const [filtro, setFiltro] = useState('todos'); // todos | tipo
@@ -102,11 +104,22 @@ export default function Cliente() {
       setAnexo({ estado: 'erro', mensagem: `"${arquivo.name}" não é aceito. Envie PDF, DOCX ou TXT.` });
       return;
     }
-    setAnexo({ estado: 'enviando', mensagem: `Enviando "${arquivo.name}" — a IA está lendo o arquivo${extrair ? ' e montando sugestões de cadastro' : ''}, pode levar até 2 minutos.` });
+    // Relatório semanal: entra com o tipo certo, título no padrão da casa e sem extração de cadastro
+    // (números da semana não são perfil — foi assim que ROAS e nomes de vendedoras contaminaram o cadastro).
+    const relatorio = tipoAnexo === 'relatorio_semanal';
+    if (relatorio && !periodoRelatorio.trim()) {
+      setAnexo({ estado: 'erro', mensagem: 'Informe o período do relatório (ex.: 14 a 20/09/2026) antes de enviar.' });
+      return;
+    }
+    const opcoes = relatorio
+      ? { extrair: false, tipo: 'relatorio_semanal', titulo: `Relatório Semanal - ${cliente.nome} - ${periodoRelatorio.trim()}` }
+      : { extrair };
+    setAnexo({ estado: 'enviando', mensagem: `Enviando "${arquivo.name}" — a IA está lendo o arquivo${opcoes.extrair ? ' e montando sugestões de cadastro' : ''}, pode levar até 2 minutos.` });
     try {
-      const r = await anexarDocumento(id, arquivo, { extrair });
+      const r = await anexarDocumento(id, arquivo, opcoes);
       if (r.sugestoes) setCliente((c) => ({ ...c, sugestoes: [...(c.sugestoes || []), r.sugestoes] }));
-      setAnexo({ estado: 'ok', mensagem: `"${arquivo.name}" entrou no cérebro.${r.sugestoes ? ' As sugestões de cadastro estão em "Informações do cliente".' : ''}${r.aviso ? ` (${r.aviso})` : ''}` });
+      setAnexo({ estado: 'ok', mensagem: `"${arquivo.name}" entrou no cérebro${relatorio ? ` como "${opcoes.titulo}"` : ''}.${r.sugestoes ? ' As sugestões de cadastro estão em "Informações do cliente".' : ''}${r.aviso ? ` (${r.aviso})` : ''}` });
+      if (relatorio) setPeriodoRelatorio('');
       listarAnexos(id).then(setAnexos).catch(() => {});
     } catch (e) {
       setAnexo({ estado: 'erro', mensagem: `Não deu para anexar "${arquivo.name}": ${e.message}` });
@@ -385,10 +398,29 @@ export default function Cliente() {
             ? <><span className="girando" aria-hidden="true" /> Enviando…</>
             : <span><strong>Escolha um arquivo</strong> ou arraste pra cá · PDF, DOCX ou TXT</span>}
         </label>
-        <label className="opcao">
-          <input type="checkbox" checked={extrair} onChange={(e) => setExtrair(e.target.checked)} disabled={enviando} />
-          Sugerir cadastro a partir deste documento (setor, público, verba, concorrentes…)
-        </label>
+        <div className="form-grade reuniao-campos">
+          <div className="form-campo">
+            <label htmlFor="anexo-tipo">Tipo do arquivo</label>
+            <select id="anexo-tipo" value={tipoAnexo} onChange={(e) => setTipoAnexo(e.target.value)} disabled={enviando}>
+              <option value="anexo">Documento do cliente (briefing, benchmark, proposta…)</option>
+              <option value="relatorio_semanal">Relatório semanal enviado ao cliente</option>
+            </select>
+          </div>
+          {tipoAnexo === 'relatorio_semanal' && (
+            <div className="form-campo">
+              <label htmlFor="anexo-periodo">Período do relatório</label>
+              <input id="anexo-periodo" value={periodoRelatorio} onChange={(e) => setPeriodoRelatorio(e.target.value)} placeholder="ex.: 14 a 20/09/2026" disabled={enviando} />
+            </div>
+          )}
+        </div>
+        {tipoAnexo === 'relatorio_semanal' ? (
+          <p className="form-ajuda">Relatórios entram no cérebro como histórico de desempenho e não geram sugestões de cadastro — números da semana não são perfil do cliente.</p>
+        ) : (
+          <label className="opcao">
+            <input type="checkbox" checked={extrair} onChange={(e) => setExtrair(e.target.checked)} disabled={enviando} />
+            Sugerir cadastro a partir deste documento (setor, público, concorrentes, diferenciais…)
+          </label>
+        )}
         {anexo.mensagem && (
           <p className={`aviso${anexo.estado === 'erro' ? ' aviso-erro' : ''}`} role={anexo.estado === 'erro' ? 'alert' : 'status'}>
             {anexo.mensagem}

@@ -30,10 +30,13 @@ export const excluirDocumento = (id) => req(`/api/documentos/${id}`, { method: '
 export const removerPerdidos = (clienteId) => req(`/api/clientes/${clienteId}/documentos/perdidos`, { method: 'DELETE' });
 export const gerarDocumento = (id, tipo) => req(`/api/clientes/${id}/gerar/${tipo}`, { method: 'POST' });
 
-export function anexarDocumento(id, arquivo, { extrair = true } = {}) {
+// tipo: 'anexo' (padrão) ou 'relatorio_semanal'; titulo opcional substitui o nome do arquivo no cérebro
+export function anexarDocumento(id, arquivo, { extrair = true, tipo, titulo } = {}) {
   const form = new FormData();
   form.append('arquivo', arquivo);
   form.append('extrair', extrair ? 'true' : 'false');
+  if (tipo) form.append('tipo', tipo);
+  if (titulo) form.append('titulo', titulo);
   return req(`/api/clientes/${id}/anexar`, { method: 'POST', body: form });
 }
 
