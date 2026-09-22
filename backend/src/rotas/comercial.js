@@ -64,7 +64,8 @@ function intervalo(periodo) {
 function resumir(leads) {
   const n = leads.length;
   const de = (f) => leads.filter(f).length;
-  const media = (vals) => (vals.length ? Math.round(vals.reduce((s, v) => s + v, 0) / vals.length) : null);
+  // mediana: uma noite ou um fim de semana sem resposta não pode puxar o número de todo mundo
+  const mediana = (vals) => { if (!vals.length) return null; const v = [...vals].sort((a, b) => a - b); const m = Math.floor(v.length / 2); return Math.round(v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2); };
   const responderam = de((l) => l.msgs_lead > 1);
   const funil = Object.fromEntries(ETAPAS.map((e) => [e, de((l) => l.etapa === e)]));
   const notas = leads.filter((l) => l.nota_atendimento != null).map((l) => l.nota_atendimento);
@@ -73,7 +74,7 @@ function resumir(leads) {
     responderam,
     pct_responderam: n ? Math.round((100 * responderam) / n) : null,
     com_humano: de((l) => l.msgs_humano > 0),
-    tempo_medio_resposta_humana_min: media(leads.filter((l) => l.primeira_resposta_humana_seg != null).map((l) => l.primeira_resposta_humana_seg / 60)),
+    tempo_medio_resposta_humana_min: mediana(leads.filter((l) => l.primeira_resposta_humana_seg != null).map((l) => l.primeira_resposta_humana_seg / 60)),
     qualificados: de((l) => ETAPAS_AVANCO.includes(l.etapa)),
     agendaram: funil.agendou + funil.comprou,
     compraram: funil.comprou,

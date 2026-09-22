@@ -23,11 +23,11 @@ function Kpis({ r, foco }) {
     <div className="kpis">
       <div className="kpi"><span className="kpi-valor">{r.leads}</span><span className="kpi-rotulo">leads</span></div>
       <div className="kpi"><span className="kpi-valor">{r.pct_responderam == null ? '—' : `${r.pct_responderam}%`}</span><span className="kpi-rotulo">voltaram a responder</span></div>
-      <div className="kpi"><span className="kpi-valor">{fmtMin(r.tempo_medio_resposta_humana_min)}</span><span className="kpi-rotulo">até o 1º atendente (média)</span></div>
+      <div className="kpi"><span className="kpi-valor">{fmtMin(r.tempo_medio_resposta_humana_min)}</span><span className="kpi-rotulo">até o 1º atendente (mediana, h. úteis)</span></div>
       <div className="kpi"><span className="kpi-valor">{r.qualificados}</span><span className="kpi-rotulo">qualificados ou além</span></div>
       <div className="kpi"><span className="kpi-valor">{r.agendaram}</span><span className="kpi-rotulo">agendaram / compraram</span></div>
       <div className="kpi"><span className="kpi-valor">{r.compraram}</span><span className="kpi-rotulo">compraram</span></div>
-      <div className={`kpi${r.esperando ? ' kpi-alerta' : ''}`}><span className="kpi-valor">{r.esperando}</span><span className="kpi-rotulo">esperando resposta</span></div>
+      <div className={`kpi${r.esperando ? ' kpi-alerta' : ''}`}><span className="kpi-valor">{r.esperando}</span><span className="kpi-rotulo">esperando resposta (≥ 2 h úteis)</span></div>
       <div className="kpi"><span className="kpi-valor">{r.nota_media ?? '—'}</span><span className="kpi-rotulo">nota do atendimento (1–5)</span></div>
       {foco && <div className="kpi"><span className="kpi-valor">{r.esfriaram}</span><span className="kpi-rotulo">esfriaram</span></div>}
     </div>
@@ -72,7 +72,7 @@ function TabelaLeads({ leads, mostrarAnuncio }) {
   return (
     <div className="tabela-rolagem">
       <table className="tabela">
-        <thead><tr><th>Lead</th>{mostrarAnuncio && <th>Anúncio</th>}<th>Interesse</th><th>Etapa</th><th>1º atendente</th><th>Espera</th><th>Nota</th></tr></thead>
+        <thead><tr><th>Lead</th>{mostrarAnuncio && <th>Anúncio</th>}<th>Interesse</th><th>Etapa</th><th>1º atendente (h. úteis)</th><th>Espera (h. úteis)</th><th>Nota</th></tr></thead>
         <tbody>
           {leads.map((l) => (
             <>
@@ -164,13 +164,13 @@ export default function Comercial({ clienteId }) {
       {erro && <p className="aviso aviso-erro">{erro}</p>}
 
       <h3 className="titulo-foco">Leads de anúncio</h3>
-      <p className="form-ajuda">Quem chegou clicando num anúncio (marca do Meta na primeira mensagem). É o piso: quem veio por link, QR ou número salvo não leva a marca.{meta ? ` Meta contou ${meta.conversas_meta ?? '—'} conversas iniciadas no mesmo recorte.` : ''}</p>
+      <p className="form-ajuda">Quem chegou clicando num anúncio (marca do Meta na primeira mensagem). É o piso: quem veio por link, QR ou número salvo não leva a marca. Tempos contam só horário comercial (seg–sex 8–18, sáb 8–12).{meta ? ` Meta contou ${meta.conversas_meta ?? '—'} conversas iniciadas no mesmo recorte.` : ''}</p>
       <Kpis r={a} foco />
 
       {dados.por_anuncio.length > 0 && (
         <div className="tabela-rolagem">
           <table className="tabela">
-            <thead><tr><th>Anúncio</th><th>Leads</th><th>Responderam</th><th>Qualif.+</th><th>Agend./Compra</th><th>1º atendente</th><th>Esperando</th><th>Nota</th></tr></thead>
+            <thead><tr><th>Anúncio</th><th>Leads</th><th>Responderam</th><th>Qualif.+</th><th>Agend./Compra</th><th>1º atendente (mediana)</th><th>Esperando</th><th>Nota</th></tr></thead>
             <tbody>
               {dados.por_anuncio.map((x) => (
                 <tr key={x.anuncio}>
@@ -193,7 +193,7 @@ export default function Comercial({ clienteId }) {
             {alertasAnuncio.map((x, i) => (
               <li key={i} className="texto-erro">
                 {x.tipo === 'sem_resposta'
-                  ? `${x.nome || x.contato} (${x.interesse || 'interesse não definido'}) espera resposta há ${x.horas} h${x.etapa ? ` — ${ETAPA[x.etapa] || x.etapa}` : ''}`
+                  ? `${x.nome || x.contato} (${x.interesse || 'interesse não definido'}) espera resposta há ${x.horas} h úteis${x.etapa ? ` — ${ETAPA[x.etapa] || x.etapa}` : ''}`
                   : `${x.nome || x.contato} está qualificado${x.interesse ? ` (${x.interesse})` : ''} e nunca falou com um atendente`}
               </li>
             ))}
@@ -236,7 +236,7 @@ export default function Comercial({ clienteId }) {
               {alertasOrganico.map((x, i) => (
                 <li key={i} className="texto-erro">
                   {x.tipo === 'sem_resposta'
-                    ? `${x.nome || x.contato} (${x.interesse || 'interesse não definido'}) espera resposta há ${x.horas} h`
+                    ? `${x.nome || x.contato} (${x.interesse || 'interesse não definido'}) espera resposta há ${x.horas} h úteis`
                     : `${x.nome || x.contato} está qualificado e nunca falou com um atendente`}
                 </li>
               ))}
