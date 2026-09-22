@@ -54,6 +54,8 @@ Cada documento tem um `estado`: `ok` (PDF no storage), `regeneravel` (PDF sumiu 
 
 ## Sugestões de cadastro
 
+Cadastro assistido: "Novo cliente" recebe nome + arquivos (transcrição de reunião → `POST /reunioes`; documentos → `POST /anexar` com extração); o formulário abre pré-preenchido com as sugestões mescladas e a pessoa revisa e salva (`PUT /clientes/:id`), marcando as sugestões como aplicadas.
+
 Upload (`POST /api/clientes/:id/anexar`, multipart `arquivo`) aceita `tipo` = `anexo` (padrão) ou `relatorio_semanal` e `titulo` opcional. Relatórios semanais entram no cérebro como histórico de desempenho e nunca geram sugestões de cadastro (números da semana não são perfil).
 
 Duas origens, mesmo painel em "Informações do cliente": reuniões (`documentos_gerados.extras.sugestoes`) e anexos (`clientes.extras.sugestoes[]`, gerado no upload quando `extrair` ≠ false — o mesmo workflow de reunião em `modo: documento`). A pessoa aplica item a item (`PUT /api/clientes/:id`) e o cockpit registra em `PATCH /api/documentos/:id/sugestoes` ou `PATCH /api/clientes/:id/sugestoes/:sid`.

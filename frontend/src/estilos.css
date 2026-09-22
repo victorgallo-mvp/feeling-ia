@@ -258,3 +258,9 @@ code {
   .doc-acoes { width: 100%; justify-content: space-between; }
   .botao { justify-content: center; }
 }
+
+/* cadastro assistido (Novo cliente) */
+.lista-simples { margin: 8px 0 0; padding-left: 18px; }
+.lista-simples li { margin: 4px 0; }
+.texto-erro { color: var(--erro); }
+.anexo select { max-width: 220px; }
