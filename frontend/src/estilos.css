@@ -264,3 +264,22 @@ code {
 .lista-simples li { margin: 4px 0; }
 .texto-erro { color: var(--erro); }
 .anexo select { max-width: 220px; }
+
+/* aba Comercial (WhatsApp) */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 14px 0; }
+.kpi { background: var(--fundo); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; }
+.kpi-valor { font-size: 22px; font-weight: 600; color: #12203a; }
+.kpi-rotulo { font-size: 12px; color: var(--texto-suave); }
+.funil { margin: 12px 0 18px; }
+.funil-linha { display: grid; grid-template-columns: 150px 1fr 40px; align-items: center; gap: 10px; margin: 4px 0; font-size: 14px; }
+.funil-barra { height: 10px; background: var(--fundo); border-radius: 5px; overflow: hidden; }
+.funil-barra span { display: block; height: 100%; background: #2f6f6a; border-radius: 5px; }
+.funil-qtd { text-align: right; font-weight: 600; }
+.tabela-rolagem { overflow-x: auto; }
+.tabela { width: 100%; border-collapse: collapse; font-size: 14px; }
+.tabela th, .tabela td { text-align: left; padding: 8px 6px; border-top: 1px solid var(--linha); vertical-align: top; }
+.tabela th { font-weight: 600; color: var(--texto-suave); font-size: 12px; border-top: 0; }
+.linha-clicavel { cursor: pointer; }
+.linha-clicavel:hover td { background: var(--fundo); }
+.linha-detalhe td { background: var(--fundo); }
+.linha-detalhe p { margin: 4px 0; }

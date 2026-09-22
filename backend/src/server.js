@@ -17,6 +17,7 @@ app.use('/api', require('./rotas/gerar'));
 app.use('/api', require('./rotas/documentos'));
 app.use('/api', require('./rotas/anexar'));
 app.use('/api', require('./rotas/reunioes'));
+app.use('/api', require('./rotas/comercial'));
 
 app.use((req, res) => res.status(404).json({ erro: 'rota não encontrada' }));
 

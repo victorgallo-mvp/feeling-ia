@@ -11,6 +11,7 @@ const WEBHOOKS = {
 // Documentos que não nascem de um botão "gerar" (o cockpit chama de outro jeito)
 const WEBHOOKS_EXTRA = {
   reuniao: process.env.N8N_WEBHOOK_REUNIAO, // resumo de transcrição de reunião
+  comercial: process.env.N8N_WEBHOOK_COMERCIAL, // classificação das conversas do WhatsApp (aba Comercial)
 };
 
 // Quais tipos têm workflow ligado — o painel usa pra mostrar "em breve" nos que faltam.

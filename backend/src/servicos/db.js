@@ -59,6 +59,40 @@ async function migrar() {
     ALTER TABLE documentos_gerados ADD COLUMN IF NOT EXISTS estado TEXT NOT NULL DEFAULT 'ok';
     ALTER TABLE documentos_gerados ADD COLUMN IF NOT EXISTS erro TEXT;
   `);
+  // Acompanhamento comercial: uma linha por lead do WhatsApp do cliente. Métricas vêm do n8n (SQL no banco
+  // do WhatsApp); etapa/interesse/nota vêm do Claude, também pelo n8n. O cockpit só lê.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS leads_comercial (
+      cliente_id INT NOT NULL,
+      contato TEXT NOT NULL,                 -- telefone (user_id no banco do WhatsApp)
+      nome TEXT,
+      origem TEXT,                           -- anuncio | organico
+      anuncio TEXT,                          -- texto do anúncio (externalAdReply), se veio de anúncio
+      primeiro_contato TIMESTAMPTZ,
+      ultima_msg TIMESTAMPTZ,
+      ultima_msg_de TEXT,                    -- lead | ia | humano
+      msgs_lead INT DEFAULT 0,
+      msgs_ia INT DEFAULT 0,
+      msgs_humano INT DEFAULT 0,
+      ia_ativa BOOLEAN,
+      primeira_resposta_humana_seg INT,      -- do 1º contato até a 1ª mensagem [DIRETO]
+      aguardando_resposta_h INT,             -- horas desde a última msg do lead sem resposta (NULL se respondido)
+      perfil JSONB,                          -- profile extraído pela IA do WhatsApp
+      etapa TEXT,                            -- novo | em_conversa | qualificado | simulacao_enviada | agendou | comprou | perdido | esfriou
+      interesse TEXT,
+      operacao TEXT,                         -- a_vista | financiamento | consorcio | nao_definido
+      objecao TEXT,
+      proximo_passo TEXT,
+      resumo TEXT,
+      nota_atendimento INT,                  -- 1 a 5 (parte humana do atendimento)
+      motivo_nota TEXT,
+      msgs_na_classificacao INT,             -- total de msgs quando classificou; muda -> reclassifica
+      classificado_em TIMESTAMPTZ,
+      atualizado_em TIMESTAMPTZ DEFAULT now(),
+      PRIMARY KEY (cliente_id, contato)
+    );
+    CREATE INDEX IF NOT EXISTS leads_comercial_cliente_data ON leads_comercial (cliente_id, primeiro_contato);
+  `);
 }
 
 module.exports = { pool, migrar };
