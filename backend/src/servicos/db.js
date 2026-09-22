@@ -40,7 +40,9 @@ async function migrar() {
     ALTER TABLE clientes ADD COLUMN IF NOT EXISTS google_ads_id TEXT;  -- 123-456-7890
     ALTER TABLE clientes ADD COLUMN IF NOT EXISTS orientacoes TEXT;    -- instruções da equipe pra IA (curto)
     ALTER TABLE clientes ADD COLUMN IF NOT EXISTS abrangencia TEXT;    -- local | regional | nacional (NULL = IA infere)
-    ALTER TABLE clientes ADD COLUMN IF NOT EXISTS extras JSONB;        -- sugestoes: [{id, origem, criado_em, sugestoes, aplicadas}]
+    ALTER TABLE clientes ADD COLUMN IF NOT EXISTS extras JSONB;        -- sugestoes: [{id, origem, criado_em, sugestoes, aplicadas}]; comercial: estado da classificação
+    ALTER TABLE clientes ADD COLUMN IF NOT EXISTS whatsapp_ativo BOOLEAN; -- aba Comercial ligada
+    ALTER TABLE clientes ADD COLUMN IF NOT EXISTS whatsapp_webhook TEXT;  -- webhook de classificação próprio (opcional; padrão N8N_WEBHOOK_COMERCIAL)
   `);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS documentos_gerados (

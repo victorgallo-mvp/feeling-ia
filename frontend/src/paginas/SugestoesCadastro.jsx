@@ -29,6 +29,7 @@ export default function SugestoesCadastro({ fonte, cliente, aoAtualizarCliente, 
       const dados = {
         nome: cliente.nome, setor: cliente.setor, cidade: cliente.cidade, conta_id: cliente.conta_id, instagram: cliente.instagram,
         site: cliente.site, google_ads_id: cliente.google_ads_id, abrangencia: cliente.abrangencia,
+        whatsapp_ativo: cliente.whatsapp_ativo, whatsapp_webhook: cliente.whatsapp_webhook,
         perfil: cliente.perfil || '', orientacoes: cliente.orientacoes || '',
       };
       for (const i of escolhidos) {

@@ -10,10 +10,9 @@ const { pool } = require('../servicos/db');
 
 const ETAPAS = ['novo', 'em_conversa', 'qualificado', 'simulacao_enviada', 'agendou', 'comprou', 'perdido', 'esfriou'];
 const ETAPAS_AVANCO = ['qualificado', 'simulacao_enviada', 'agendou', 'comprou']; // "avançou" no funil
-// Só clientes listados aqui têm WhatsApp ligado ao cockpit (o workflow lê um banco por cliente).
-// Ex.: COMERCIAL_CLIENTE_IDS=33,41
-const clientesAtivos = () => String(process.env.COMERCIAL_CLIENTE_IDS || '').split(',').map((x) => Number(x.trim())).filter(Boolean);
-const comercialAtivo = (id) => clientesAtivos().includes(Number(id));
+// O cliente liga o WhatsApp na própria ficha (whatsapp_ativo). O webhook pode ser próprio (cada cliente tem seu banco
+// e, portanto, seu workflow com a credencial certa) ou o padrão N8N_WEBHOOK_COMERCIAL.
+const webhookDe = (cliente) => cliente.whatsapp_webhook || process.env.N8N_WEBHOOK_COMERCIAL;
 
 function urlPublica(req) {
   if (process.env.PUBLIC_URL) return process.env.PUBLIC_URL.replace(/\/$/, '');
@@ -23,7 +22,7 @@ function urlPublica(req) {
 
 async function buscarCliente(id) {
   const { rows } = await pool.query(
-    "SELECT id, nome, conta_id, COALESCE(extras->'comercial', '{}'::jsonb) AS comercial FROM clientes WHERE id = $1", [id]
+    "SELECT id, nome, conta_id, COALESCE(whatsapp_ativo, false) AS whatsapp_ativo, whatsapp_webhook, COALESCE(extras->'comercial', '{}'::jsonb) AS comercial FROM clientes WHERE id = $1", [id]
   );
   return rows[0] || null;
 }
@@ -45,7 +44,7 @@ router.get('/clientes/:id/comercial', async (req, res) => {
   try {
     const cliente = await buscarCliente(req.params.id);
     if (!cliente) return res.status(404).json({ erro: 'cliente não encontrado' });
-    if (!comercialAtivo(cliente.id)) return res.json({ ativo: false });
+    if (!cliente.whatsapp_ativo) return res.json({ ativo: false });
 
     const { rows: leads } = await pool.query(
       `SELECT * FROM leads_comercial
@@ -103,7 +102,8 @@ router.get('/clientes/:id/comercial', async (req, res) => {
 
 // Dispara o workflow do n8n para um cliente. Lança erro se o n8n não aceitar.
 async function dispararClassificacao(cliente, baseUrl) {
-  const url = process.env.N8N_WEBHOOK_COMERCIAL;
+  const url = webhookDe(cliente);
+  if (!url) throw new Error('nenhum webhook de classificação: defina N8N_WEBHOOK_COMERCIAL ou o webhook na ficha do cliente');
   const token = crypto.randomBytes(16).toString('hex');
   await salvarEstado(cliente.id, { iniciado_em: new Date().toISOString(), concluido_em: null, erro: null, callback_token: token });
   try {
@@ -121,7 +121,6 @@ async function dispararClassificacao(cliente, baseUrl) {
 // Rodada automática: uma vez por dia (06:30 em Brasília) para todos os clientes com WhatsApp ligado.
 // Precisa de PUBLIC_URL (o n8n chama o callback de fora). Só dispara; quem trabalha é o n8n.
 function agendarRodadaDiaria() {
-  if (!process.env.N8N_WEBHOOK_COMERCIAL || !clientesAtivos().length) return;
   if (!process.env.PUBLIC_URL) { console.warn('[comercial] rodada diária desligada: defina PUBLIC_URL'); return; }
   let ultimaData = null;
   setInterval(async () => {
@@ -129,7 +128,9 @@ function agendarRodadaDiaria() {
     const hoje = agora.toISOString().slice(0, 10);
     if (agora.getHours() !== 6 || agora.getMinutes() < 30 || ultimaData === hoje) return;
     ultimaData = hoje;
-    for (const id of clientesAtivos()) {
+    let ativos = [];
+    try { ativos = (await pool.query('SELECT id FROM clientes WHERE whatsapp_ativo = true')).rows.map((r) => r.id); } catch (e) { console.error('[comercial] rodada diária:', e.message); return; }
+    for (const id of ativos) {
       try {
         const cliente = await buscarCliente(id);
         if (cliente) { await dispararClassificacao(cliente, process.env.PUBLIC_URL.replace(/\/$/, '')); console.log(`[comercial] rodada diária disparada para ${cliente.nome}`); }
@@ -140,12 +141,11 @@ function agendarRodadaDiaria() {
 
 // POST /clientes/:id/comercial/classificar — dispara o workflow do n8n (assíncrono, callback com token).
 router.post('/clientes/:id/comercial/classificar', async (req, res) => {
-  const url = process.env.N8N_WEBHOOK_COMERCIAL;
-  if (!url) return res.status(503).json({ erro: 'N8N_WEBHOOK_COMERCIAL não configurado' });
   try {
     const cliente = await buscarCliente(req.params.id);
     if (!cliente) return res.status(404).json({ erro: 'cliente não encontrado' });
-    if (!comercialAtivo(cliente.id)) return res.status(403).json({ erro: 'este cliente não tem WhatsApp ligado ao cockpit (COMERCIAL_CLIENTE_IDS)' });
+    if (!cliente.whatsapp_ativo) return res.status(403).json({ erro: 'ligue "WhatsApp com IA" na ficha do cliente' });
+    if (!webhookDe(cliente)) return res.status(503).json({ erro: 'N8N_WEBHOOK_COMERCIAL não configurado e o cliente não tem webhook próprio' });
     const emAndamento = cliente.comercial.iniciado_em && !cliente.comercial.concluido_em
       && Date.now() - new Date(cliente.comercial.iniciado_em).getTime() < 15 * 60 * 1000;
     if (emAndamento) return res.status(202).json({ ok: true, ja_em_andamento: true });

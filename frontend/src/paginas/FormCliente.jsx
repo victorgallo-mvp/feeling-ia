@@ -12,7 +12,7 @@ Verba mensal de mídia:
 Tom de voz:
 Observações:`;
 
-const VAZIO = { nome: '', setor: '', cidade: '', conta_id: '', perfil: '', instagram: '', site: '', google_ads_id: '', orientacoes: '', abrangencia: '' };
+const VAZIO = { nome: '', setor: '', cidade: '', conta_id: '', perfil: '', instagram: '', site: '', google_ads_id: '', orientacoes: '', abrangencia: '', whatsapp_ativo: false, whatsapp_webhook: '' };
 
 const EXEMPLO_ORIENTACOES = `Ex.: Foco deste mês é a campanha de Dia das Mães.
 Não citar o concorrente X nos documentos.
@@ -23,7 +23,7 @@ Não falar de preço — o cliente prefere tratar no atendimento.`;
 export default function FormCliente({ inicial, rotuloSalvar, aoSalvar, aoCancelar }) {
   const [dados, setDados] = useState(() => {
     const d = { ...VAZIO };
-    for (const k of Object.keys(VAZIO)) d[k] = inicial?.[k] ?? '';
+    for (const k of Object.keys(VAZIO)) d[k] = inicial?.[k] ?? VAZIO[k];
     return d;
   });
   const [salvando, setSalvando] = useState(false);
@@ -106,6 +106,22 @@ export default function FormCliente({ inicial, rotuloSalvar, aoSalvar, aoCancela
               <input {...campo('google_ads_id')} placeholder="123-456-7890" autoComplete="off" inputMode="numeric" />
             </div>
           </div>
+        </fieldset>
+        <fieldset className="form-grupo form-campo-largo">
+          <legend>WhatsApp com IA</legend>
+          <label className="opcao">
+            <input type="checkbox" checked={dados.whatsapp_ativo} onChange={(e) => setDados((d) => ({ ...d, whatsapp_ativo: e.target.checked }))} />
+            Este cliente tem WhatsApp com IA ligado ao cockpit (aba Comercial)
+          </label>
+          {dados.whatsapp_ativo && (
+            <div className="form-campo">
+              <label htmlFor="campo-whatsapp_webhook">Webhook de classificação <span className="form-opcional">(opcional)</span></label>
+              <input {...campo('whatsapp_webhook')} placeholder="https://…/webhook/classificar-conversas-cliente" autoComplete="off" spellCheck="false" inputMode="url" />
+              <p className="form-ajuda">
+                Cada cliente tem seu banco do WhatsApp, então cada um tem uma cópia do workflow no n8n com a credencial certa. Deixe vazio para usar o webhook padrão do servidor.
+              </p>
+            </div>
+          )}
         </fieldset>
         <div className="form-campo form-campo-largo">
           <div className="form-rotulo-linha">

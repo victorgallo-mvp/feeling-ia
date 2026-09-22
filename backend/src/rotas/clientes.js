@@ -4,7 +4,7 @@ const router = express.Router();
 const { pool } = require('../servicos/db');
 const { apagarPdf } = require('../servicos/storage');
 
-const CAMPOS = "id, nome, setor, cidade, conta_id, perfil, instagram, site, google_ads_id, orientacoes, abrangencia, COALESCE(extras->'sugestoes', '[]'::jsonb) AS sugestoes";
+const CAMPOS = "id, nome, setor, cidade, conta_id, perfil, instagram, site, google_ads_id, orientacoes, abrangencia, COALESCE(whatsapp_ativo, false) AS whatsapp_ativo, whatsapp_webhook, COALESCE(extras->'sugestoes', '[]'::jsonb) AS sugestoes";
 const ABRANGENCIAS = ['local', 'regional', 'nacional'];
 const LIMITE_PERFIL = 20000;
 const LIMITE_ORIENTACOES = 1500; // é instrução, não documento: curto pra entrar inteiro em todo prompt
@@ -23,6 +23,9 @@ function lerCliente(body) {
     google_ads_id: texto(body?.google_ads_id),
     orientacoes: texto(body?.orientacoes),
     abrangencia: texto(body?.abrangencia),
+    // Aba Comercial: WhatsApp com IA ligado ao cockpit; webhook próprio quando o cliente tem workflow/banco separado
+    whatsapp_ativo: body?.whatsapp_ativo === true || body?.whatsapp_ativo === 'true',
+    whatsapp_webhook: texto(body?.whatsapp_webhook),
   };
   if (!dados.nome) return { erro: 'nome é obrigatório' };
   if (dados.conta_id && /\s/.test(dados.conta_id)) return { erro: 'conta_id não pode ter espaços' };
@@ -47,6 +50,7 @@ function lerCliente(body) {
     }
     dados.site = url;
   }
+  if (dados.whatsapp_webhook && !/^https:\/\/[^\s]+$/i.test(dados.whatsapp_webhook)) return { erro: 'webhook do WhatsApp deve ser uma URL https' };
   if (dados.google_ads_id) {
     const digitos = dados.google_ads_id.replace(/\D/g, '');
     if (digitos.length !== 10) return { erro: 'ID do Google Ads tem 10 dígitos (ex.: 123-456-7890)' };
@@ -55,7 +59,7 @@ function lerCliente(body) {
   return { dados };
 }
 
-const VALORES = (d) => [d.nome, d.setor, d.cidade, d.conta_id, d.perfil, d.instagram, d.site, d.google_ads_id, d.orientacoes, d.abrangencia];
+const VALORES = (d) => [d.nome, d.setor, d.cidade, d.conta_id, d.perfil, d.instagram, d.site, d.google_ads_id, d.orientacoes, d.abrangencia, d.whatsapp_ativo, d.whatsapp_webhook];
 
 function responderErro(res, e) {
   if (e.code === '23505') return res.status(409).json({ erro: 'já existe um cliente com esse nome' });
@@ -90,8 +94,8 @@ router.post('/clientes', async (req, res) => {
   if (erro) return res.status(400).json({ erro });
   try {
     const { rows } = await pool.query(
-      `INSERT INTO clientes (nome, setor, cidade, conta_id, perfil, instagram, site, google_ads_id, orientacoes, abrangencia)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING ${CAMPOS}`,
+      `INSERT INTO clientes (nome, setor, cidade, conta_id, perfil, instagram, site, google_ads_id, orientacoes, abrangencia, whatsapp_ativo, whatsapp_webhook)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING ${CAMPOS}`,
       VALORES(dados)
     );
     res.status(201).json(rows[0]);
@@ -106,8 +110,8 @@ router.put('/clientes/:id', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `UPDATE clientes SET nome=$1, setor=$2, cidade=$3, conta_id=$4, perfil=$5,
-         instagram=$6, site=$7, google_ads_id=$8, orientacoes=$9, abrangencia=$10
-       WHERE id = $11 RETURNING ${CAMPOS}`,
+         instagram=$6, site=$7, google_ads_id=$8, orientacoes=$9, abrangencia=$10, whatsapp_ativo=$11, whatsapp_webhook=$12
+       WHERE id = $13 RETURNING ${CAMPOS}`,
       [...VALORES(dados), req.params.id]
     );
     if (!rows.length) return res.status(404).json({ erro: 'cliente não encontrado' });
