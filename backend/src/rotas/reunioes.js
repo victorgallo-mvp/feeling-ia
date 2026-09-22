@@ -24,6 +24,49 @@ const upload = multer({
 
 const texto = (v) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 200) : null);
 
+// Processa em segundo plano: transcreve (se for gravação), resume no n8n, gera PDF, indexa o resumo.
+// O documento nasce 'gerando' e a tela acompanha pelo polling da lista de documentos.
+async function processarReuniao(docId, cliente, arquivo, nome, { titulo, data_reuniao }) {
+  const gravacao = ehAudio(nome);
+  try {
+    let transcricao, trechos = 0;
+    if (gravacao) {
+      const r = await transcreverGravacao(arquivo, nome, (i, n) => console.log(`[reunioes] doc ${docId}: trecho ${i + 1}/${n}`));
+      transcricao = r.texto; trechos = r.trechos;
+    } else {
+      transcricao = await extrairTexto(arquivo, nome);
+    }
+    if (transcricao.length < MIN_CHARS)
+      throw new Error(gravacao ? 'a gravação foi transcrita, mas o texto ficou muito curto — confira se o áudio tem fala' : 'não consegui ler uma transcrição nesse arquivo (texto muito curto ou vazio)');
+
+    const { markdown, sugestoes } = await resumirReuniaoViaN8n({
+      cliente_id: cliente.id, cliente_nome: cliente.nome, conta_id: cliente.conta_id, titulo, data_reuniao, texto: transcricao,
+    });
+    const pdf = Buffer.from(await markdownParaPdf(markdown));
+    const caminho = await salvarPdf(pdf, cliente.id, 'reuniao');
+    const caminhoTranscricao = await salvarArquivo(Buffer.from(transcricao, 'utf8'), `transcricao-${cliente.id}.txt`);
+
+    const tituloCerebro = `Reunião${data_reuniao ? ' ' + data_reuniao : ''} — ${titulo}`;
+    let indexado = true;
+    try {
+      await anexarViaN8n(Buffer.from(markdown, 'utf8'), `${tituloCerebro}.txt`, {
+        conta_id: cliente.conta_id, cliente_nome: cliente.nome, cliente_id: cliente.id, titulo: tituloCerebro, tipo: 'reuniao',
+      });
+    } catch (e) {
+      console.error('[reunioes] resumo não entrou no cérebro:', e.message);
+      indexado = false;
+    }
+    const extras = { titulo, data_reuniao, transcricao: caminhoTranscricao, arquivo_original: nome, trechos_audio: trechos || undefined, sugestoes, aplicadas: [], indexado };
+    await pool.query(
+      `UPDATE documentos_gerados SET caminho = $2, markdown = $3, extras = COALESCE(extras, '{}'::jsonb) || $4::jsonb, estado = 'ok', erro = NULL WHERE id = $1`,
+      [docId, caminho, markdown, JSON.stringify(extras)]
+    );
+  } catch (e) {
+    console.error(`[reunioes] doc ${docId} falhou:`, e.message);
+    await pool.query("UPDATE documentos_gerados SET estado = 'erro', erro = $2 WHERE id = $1", [docId, String(e.message).slice(0, 500)]).catch(() => {});
+  }
+}
+
 router.post('/clientes/:id/reunioes', (req, res) => {
   upload(req, res, async (erroUpload) => {
     if (erroUpload) {
@@ -34,58 +77,27 @@ router.post('/clientes/:id/reunioes', (req, res) => {
     const nome = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
     if (!EXTENSOES.includes(path.extname(nome).toLowerCase()))
       return res.status(400).json({ erro: `formato não aceito — envie ${EXTENSOES.join(', ')}` });
+    if (ehAudio(nome) && !transcricaoConfigurada())
+      return res.status(503).json({ erro: 'transcrição de áudio ainda não foi ligada no n8n (N8N_WEBHOOK_TRANSCREVER)' });
 
     try {
       const { rows } = await pool.query('SELECT id, nome, conta_id FROM clientes WHERE id = $1', [req.params.id]);
       if (!rows.length) return res.status(404).json({ erro: 'cliente não encontrado' });
       const cliente = rows[0];
-
-      let transcricao, trechos = 0;
-      if (ehAudio(nome)) {
-        if (!transcricaoConfigurada()) return res.status(503).json({ erro: 'transcrição de áudio ainda não foi ligada no n8n (N8N_WEBHOOK_TRANSCREVER)' });
-        const r = await transcreverGravacao(req.file.buffer, nome, (i, n) => console.log(`[reunioes] transcrevendo trecho ${i + 1}/${n} de "${nome}"`));
-        transcricao = r.texto; trechos = r.trechos;
-      } else {
-        transcricao = await extrairTexto(req.file.buffer, nome);
-      }
-      if (transcricao.length < MIN_CHARS)
-        return res.status(400).json({ erro: ehAudio(nome) ? 'a gravação foi transcrita, mas o texto ficou muito curto — confira se o áudio tem fala' : 'não consegui ler uma transcrição nesse arquivo (texto muito curto ou vazio)' });
-
       const titulo = texto(req.body?.titulo) || nome.replace(/\.[^.]+$/, '');
       const data_reuniao = texto(req.body?.data_reuniao);
 
-      // 1. n8n resume e sugere
-      const { markdown, sugestoes } = await resumirReuniaoViaN8n({
-        cliente_id: cliente.id, cliente_nome: cliente.nome, conta_id: cliente.conta_id, titulo, data_reuniao, texto: transcricao,
-      });
-
-      // 2. documento "reuniao": PDF + markdown + extras; transcrição bruta guardada, não indexada
-      const pdf = Buffer.from(await markdownParaPdf(markdown));
-      const caminho = await salvarPdf(pdf, cliente.id, 'reuniao');
-      const caminhoTranscricao = await salvarArquivo(Buffer.from(transcricao, 'utf8'), `transcricao-${cliente.id}.txt`);
-      const extras = { titulo, data_reuniao, transcricao: caminhoTranscricao, arquivo_original: nome, trechos_audio: trechos || undefined, sugestoes, aplicadas: [] };
       const ins = await pool.query(
-        `INSERT INTO documentos_gerados (cliente_id, cliente_nome, tipo, caminho, markdown, extras)
-         VALUES ($1,$2,'reuniao',$3,$4,$5) RETURNING id, tipo, criado_em`,
-        [cliente.id, cliente.nome, caminho, markdown, JSON.stringify(extras)]
+        `INSERT INTO documentos_gerados (cliente_id, cliente_nome, tipo, estado, extras)
+         VALUES ($1,$2,'reuniao','gerando',$3) RETURNING id, tipo, criado_em`,
+        [cliente.id, cliente.nome, JSON.stringify({ titulo, data_reuniao, arquivo_original: nome, aplicadas: [] })]
       );
       const doc = ins.rows[0];
-
-      // 3. só o resumo vai pro cérebro
-      const tituloCerebro = `Reunião${data_reuniao ? ' ' + data_reuniao : ''} — ${titulo}`;
-      let indexado = true;
-      try {
-        await anexarViaN8n(Buffer.from(markdown, 'utf8'), `${tituloCerebro}.txt`, {
-          conta_id: cliente.conta_id, cliente_nome: cliente.nome, cliente_id: cliente.id, titulo: tituloCerebro, tipo: 'reuniao',
-        });
-      } catch (e) {
-        console.error('[reunioes] resumo não entrou no cérebro:', e.message);
-        indexado = false;
-      }
-
-      res.json({
-        documento: { ...doc, url_download: `/api/documentos/${doc.id}/download`, estado: 'ok', titulo, data_reuniao },
-        sugestoes, indexado,
+      // responde já; o processamento (transcrição de 1 h leva minutos) segue em segundo plano
+      processarReuniao(doc.id, cliente, req.file.buffer, nome, { titulo, data_reuniao });
+      res.status(202).json({
+        documento: { ...doc, url_download: `/api/documentos/${doc.id}/download`, estado: 'gerando', titulo, data_reuniao },
+        sugestoes: null, indexado: null, gravacao: ehAudio(nome),
       });
     } catch (e) {
       console.error(e);

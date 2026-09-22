@@ -25,9 +25,11 @@ export default function Reunioes({ clienteId, documentos, ligado, ligadoAudio, a
       const r = await enviarReuniao(clienteId, arquivo, { titulo, data_reuniao: data });
       aoNovoDocumento({ ...r.documento, sugestoes: r.sugestoes, aplicadas: [] });
       setTitulo(''); setData('');
-      setEstado({ fase: 'ok', mensagem: r.indexado
-        ? 'Resumo salvo e adicionado ao cérebro. As sugestões de cadastro estão em "Informações do cliente".'
-        : 'Resumo salvo, mas não entrou no cérebro (o n8n de anexar não respondeu). Você pode anexar o PDF manualmente.' });
+      setEstado({ fase: 'ok', mensagem: r.documento?.estado === 'gerando'
+        ? `Recebido. ${r.gravacao ? 'Transcrevendo e resumindo' : 'Resumindo'} em segundo plano — a reunião aparece abaixo como "processando" e, quando terminar, as sugestões de cadastro entram em "Informações do cliente". Pode sair da página.`
+        : (r.indexado
+          ? 'Resumo salvo e adicionado ao cérebro. As sugestões de cadastro estão em "Informações do cliente".'
+          : 'Resumo salvo, mas não entrou no cérebro (o n8n de anexar não respondeu). Você pode anexar o PDF manualmente.') });
     } catch (e) {
       setEstado({ fase: 'erro', mensagem: `Não deu para resumir: ${e.message}` });
     } finally {
@@ -73,8 +75,10 @@ export default function Reunioes({ clienteId, documentos, ligado, ligadoAudio, a
                 <span className="doc-data">{d.data_reuniao ? `reunião de ${d.data_reuniao} · ` : ''}resumo salvo em {new Date(d.criado_em).toLocaleDateString('pt-BR')}</span>
               </div>
               <div className="doc-acoes">
-                {d.estado !== 'perdido' && <a className="link" href={urlDownload(d)}>Resumo (PDF)</a>}
-                <a className="link" href={urlTranscricao(d)} target="_blank" rel="noreferrer">Transcrição</a>
+                {d.estado === 'gerando' && <span className="etiqueta etiqueta-ok"><span className="girando girando-mini" aria-hidden="true" /> processando</span>}
+                {d.estado === 'erro' && <span className="etiqueta etiqueta-erro" title={d.erro || ''}>falhou{d.erro ? `: ${d.erro}` : ''}</span>}
+                {!['perdido', 'gerando', 'erro'].includes(d.estado) && <a className="link" href={urlDownload(d)}>Resumo (PDF)</a>}
+                {!['gerando', 'erro'].includes(d.estado) && <a className="link" href={urlTranscricao(d)} target="_blank" rel="noreferrer">Transcrição</a>}
               </div>
             </li>
           ))}

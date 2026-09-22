@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { anexarDocumento, atualizarCliente, criarCliente, enviarReuniao, registrarSugestaoAnexo, registrarSugestoes } from '../api.js';
+import { anexarDocumento, atualizarCliente, criarCliente, enviarReuniao, listarDocumentos, registrarSugestaoAnexo, registrarSugestoes } from '../api.js';
 import FormCliente from './FormCliente.jsx';
 import { itensDe } from './SugestoesCadastro.jsx';
 
@@ -63,8 +63,21 @@ export default function NovoCliente() {
       try {
         if (item.tipo === 'reuniao') {
           const r = await enviarReuniao(c.id, item.arquivo, { titulo: item.arquivo.name.replace(/\.[^.]+$/, '') });
-          if (r.sugestoes) recebidas.push({ sugestoes: r.sugestoes, registrar: (dados) => registrarSugestoes(r.documento.id, dados) });
-          atualizarArquivo(i, { estado: 'ok', mensagem: r.indexado ? 'resumo no cérebro' : 'resumo salvo (não entrou no cérebro)' });
+          // o backend responde na hora e processa em segundo plano; aqui esperamos terminar para pré-preencher o formulário
+          let docFinal = r.documento;
+          if (r.documento?.estado === 'gerando') {
+            for (let tent = 0; tent < 360; tent++) { // até 45 min (gravação longa)
+              await new Promise((ok) => setTimeout(ok, 7500));
+              const docs = await listarDocumentos(c.id).catch(() => []);
+              const atual = docs.find((d) => d.id === r.documento.id);
+              if (atual && atual.estado !== 'gerando') { docFinal = atual; break; }
+              atualizarArquivo(i, { mensagem: `${ehAudio(item.arquivo.name) ? 'transcrevendo e resumindo' : 'resumindo'}… ${Math.round((tent + 1) * 7.5 / 60)} min` });
+            }
+            if (docFinal.estado === 'gerando') throw new Error('demorou demais; acompanhe na página do cliente');
+            if (docFinal.estado === 'erro') throw new Error(docFinal.erro || 'falhou');
+          }
+          if (docFinal.sugestoes) recebidas.push({ sugestoes: docFinal.sugestoes, registrar: (dados) => registrarSugestoes(docFinal.id, dados) });
+          atualizarArquivo(i, { estado: 'ok', mensagem: 'resumo no cérebro' });
         } else if (ehAudio(item.arquivo.name)) {
           throw new Error('gravação só pode entrar como reunião — troque o tipo');
         } else {

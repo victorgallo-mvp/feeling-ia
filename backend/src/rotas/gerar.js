@@ -126,9 +126,15 @@ router.post('/documentos/:id/concluir', async (req, res) => {
 
 // Marca como erro o que passou do tempo sem callback (chamado pela listagem).
 async function expirarPendentes(clienteId) {
+  // gravação de 1-2 h leva bem mais que um documento; 45 min antes de dar por perdida
+  await pool.query(
+    `UPDATE documentos_gerados SET estado = 'erro', erro = 'a transcrição/resumo não terminou em 45 minutos'
+     WHERE cliente_id = $1 AND estado = 'gerando' AND tipo = 'reuniao' AND criado_em < now() - interval '45 minutes'`,
+    [clienteId]
+  );
   await pool.query(
     `UPDATE documentos_gerados SET estado = 'erro', erro = 'o n8n não respondeu em ${TEMPO_MAXIMO_MIN} minutos'
-     WHERE cliente_id = $1 AND estado = 'gerando' AND criado_em < now() - interval '${TEMPO_MAXIMO_MIN} minutes'`,
+     WHERE cliente_id = $1 AND estado = 'gerando' AND tipo <> 'reuniao' AND criado_em < now() - interval '${TEMPO_MAXIMO_MIN} minutes'`,
     [clienteId]
   );
 }
