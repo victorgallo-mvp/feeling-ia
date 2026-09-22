@@ -7,6 +7,7 @@ const WEBHOOKS = {
   pesquisa:  process.env.N8N_WEBHOOK_PESQUISA,
   briefing:  process.env.N8N_WEBHOOK_BRIEFING,
   analise:   process.env.N8N_WEBHOOK_PRESENCA, // Análise de Presença Digital
+  interno:   process.env.N8N_WEBHOOK_INTERNO,  // Análise interna da conta (uso interno, não vai ao cliente)
 };
 // Documentos que não nascem de um botão "gerar" (o cockpit chama de outro jeito)
 const WEBHOOKS_EXTRA = {

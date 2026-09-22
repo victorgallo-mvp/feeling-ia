@@ -57,7 +57,7 @@ router.post('/clientes/:id/gerar/:tipo', async (req, res) => {
 
   try {
     const { rows } = await pool.query(
-      'SELECT id, nome, conta_id, instagram, site, google_ads_id FROM clientes WHERE id = $1', [id]
+      'SELECT id, nome, conta_id, instagram, site, google_ads_id, COALESCE(whatsapp_ativo, false) AS whatsapp_ativo FROM clientes WHERE id = $1', [id]
     );
     if (!rows.length) return res.status(404).json({ erro: 'cliente não encontrado' });
     const cliente = rows[0];
@@ -86,6 +86,7 @@ router.post('/clientes/:id/gerar/:tipo', async (req, res) => {
     const dados = {
       conta_id: cliente.conta_id, cliente_nome: cliente.nome, cliente_id: cliente.id,
       instagram: cliente.instagram, site: cliente.site, google_ads_id: cliente.google_ads_id,
+      whatsapp_ativo: cliente.whatsapp_ativo, // a análise interna inclui o resumo comercial quando houver
       documento_id: doc.id,
       callback_url: `${urlPublica(req)}/api/documentos/${doc.id}/concluir`,
       callback_token: token,

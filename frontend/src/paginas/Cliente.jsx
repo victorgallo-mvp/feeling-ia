@@ -11,6 +11,7 @@ const TIPOS = [
   { tipo: 'pesquisa', rotulo: 'Pesquisa de Mercado', acao: 'Gerar Pesquisa de Mercado' },
   { tipo: 'briefing', rotulo: 'Briefing', acao: 'Gerar Briefing' },
   { tipo: 'analise', rotulo: 'Análise de Presença Digital', acao: 'Analisar Presença Digital' },
+  { tipo: 'interno', rotulo: 'Análise interna da conta', acao: 'Analisar conta (interno)', interno: true },
 ];
 const ROTULOS = { ...Object.fromEntries(TIPOS.map((t) => [t.tipo, t.rotulo])), reuniao: 'Reunião' };
 const ABRANGENCIA = { local: 'Local (cidade e região)', regional: 'Regional', nacional: 'Nacional' };
@@ -232,7 +233,7 @@ export default function Cliente() {
   const bloqueio = (tipo) => {
     if (ligados && ligados[tipo] === false) return 'em breve';
     if (gerandoTipo(tipo)) return 'gerando';
-    if (tipo === 'relatorio' && !cliente.conta_id) return 'falta ID da conta';
+    if ((tipo === 'relatorio' || tipo === 'interno') && !cliente.conta_id) return 'falta ID da conta';
     return null;
   };
   // derivados da lista de documentos: contagem por tipo, mais recente de cada tipo, perdidos, filtro
@@ -268,12 +269,14 @@ export default function Cliente() {
           {TIPOS.map((t) => (
             <button
               key={t.tipo}
-              className="botao"
+              className={`botao${t.interno ? ' botao-secundario' : ''}`}
+              title={t.interno ? 'Documento de uso interno da Feeling — não vai para o cliente' : undefined}
               disabled={gerando === t.tipo || bloqueio(t.tipo) !== null}
               onClick={() => gerar(t.tipo)}
             >
               {gerando === t.tipo || gerandoTipo(t.tipo) ? <><span className="girando" aria-hidden="true" /> {t.acao}</> : t.acao}
               {bloqueio(t.tipo) && bloqueio(t.tipo) !== 'gerando' && <span className="etiqueta">{bloqueio(t.tipo)}</span>}
+              {t.interno && !bloqueio(t.tipo) && <span className="etiqueta">uso interno</span>}
             </button>
           ))}
         </div>
@@ -316,6 +319,7 @@ export default function Cliente() {
                   <div className="doc-info">
                     <span className="doc-tipo">
                       {ROTULOS[d.tipo] || d.tipo}{d.tipo === 'reuniao' && d.titulo ? ` · ${d.titulo}` : ''}
+                      {d.tipo === 'interno' && <span className="etiqueta">uso interno</span>}
                       {maisRecente[d.tipo] === d.id && <span className="etiqueta etiqueta-ok">mais recente</span>}
                       {d.estado === 'perdido' && <span className="etiqueta etiqueta-erro">sem arquivo</span>}
                       {d.estado === 'gerando' && <span className="etiqueta etiqueta-ok"><span className="girando girando-mini" aria-hidden="true" /> gerando</span>}
