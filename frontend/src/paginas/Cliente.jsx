@@ -382,6 +382,7 @@ export default function Cliente() {
         clienteId={id}
         documentos={documentos}
         ligado={!ligados || ligados.reuniao !== false}
+        ligadoAudio={!ligados || ligados.transcrever !== false}
         aoNovoDocumento={(doc) => { setDocumentos((atual) => [doc, ...atual]); setNovoId(doc.id); }}
       />
 

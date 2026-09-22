@@ -102,3 +102,7 @@ Para clientes com WhatsApp + IA (Evolution/Olívia) ligado ao cockpit. O workflo
 ## Análise interna da conta (tipo `interno`)
 
 Documento de uso interno (não vai ao cliente), gerado como os outros (`POST /api/clientes/:id/gerar/interno`, webhook `N8N_WEBHOOK_INTERNO`, assíncrono com callback). O workflow lê o Sentinel por campanha (semana fechada, 3 semanas anteriores, 30 dias) e por anúncio (top por gasto, semana atual e anterior), aplica uma triagem determinística (semáforo por regras: sem resultado, custo por resultado subiu, resultados caíram, frequência alta, CTR abaixo da mediana, "estrela") e o Claude escreve veredito, triagem, leitura geral, cruzamento comercial × mídia (quando o cliente tem WhatsApp ligado), metas e prioridades do gestor. Exige `conta_id`.
+
+## Gravações de reunião (áudio/vídeo)
+
+"Reuniões" e o cadastro assistido aceitam MP3, M4A, WAV, OGG, MP4, WEBM… (até 300 MB). O cockpit converte para mono 16 kHz (ffmpeg, no Dockerfile), corta em trechos de 10 min e manda cada um ao webhook `N8N_WEBHOOK_TRANSCREVER` (workflow "Transcrever Áudio": OpenAI Whisper via crédito do n8n, pt), junta o texto e segue o mesmo fluxo da transcrição em texto. A transcrição fica guardada em `extras.transcricao`; `extras.trechos_audio` registra em quantas partes foi.

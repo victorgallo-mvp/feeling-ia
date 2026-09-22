@@ -1,9 +1,12 @@
 import { useRef, useState } from 'react';
 import { enviarReuniao, urlDownload, urlTranscricao } from '../api.js';
 
-const EXTENSOES = ['.txt', '.md', '.docx', '.pdf'];
+const EXTENSOES_TEXTO = ['.txt', '.md', '.docx', '.pdf'];
+const EXTENSOES_AUDIO = ['.mp3', '.m4a', '.wav', '.ogg', '.opus', '.aac', '.flac', '.mp4', '.webm', '.mov', '.mkv'];
+const EXTENSOES = [...EXTENSOES_TEXTO, ...EXTENSOES_AUDIO];
+const ehAudio = (nome) => EXTENSOES_AUDIO.includes(nome.slice(nome.lastIndexOf('.')).toLowerCase());
 // Seção "Reuniões": upload da transcrição + sugestões de cadastro da última reunião pendente.
-export default function Reunioes({ clienteId, documentos, ligado, aoNovoDocumento }) {
+export default function Reunioes({ clienteId, documentos, ligado, ligadoAudio, aoNovoDocumento }) {
   const [titulo, setTitulo] = useState('');
   const [data, setData] = useState('');
   const [estado, setEstado] = useState({ fase: 'parado', mensagem: '' }); // parado | enviando | ok | erro
@@ -12,8 +15,12 @@ export default function Reunioes({ clienteId, documentos, ligado, aoNovoDocument
   async function enviar(arquivo) {
     if (!arquivo || estado.fase === 'enviando') return;
     const ext = arquivo.name.slice(arquivo.name.lastIndexOf('.')).toLowerCase();
-    if (!EXTENSOES.includes(ext)) { setEstado({ fase: 'erro', mensagem: `"${arquivo.name}" não é aceito. Envie TXT, MD, DOCX ou PDF.` }); return; }
-    setEstado({ fase: 'enviando', mensagem: `Lendo "${arquivo.name}" e montando o resumo — leva de 20s a 1 minuto.` });
+    if (!EXTENSOES.includes(ext)) { setEstado({ fase: 'erro', mensagem: `"${arquivo.name}" não é aceito. Envie a transcrição (TXT, MD, DOCX, PDF) ou a gravação (MP3, M4A, WAV, MP4…).` }); return; }
+    const gravacao = ehAudio(arquivo.name);
+    if (gravacao && !ligadoAudio) { setEstado({ fase: 'erro', mensagem: 'A transcrição de gravações ainda não foi ligada no n8n (N8N_WEBHOOK_TRANSCREVER). Envie a transcrição em texto.' }); return; }
+    setEstado({ fase: 'enviando', mensagem: gravacao
+      ? `Transcrevendo "${arquivo.name}" e montando o resumo — uma reunião de 1 hora leva uns 3 a 5 minutos. Pode deixar esta aba aberta.`
+      : `Lendo "${arquivo.name}" e montando o resumo — leva de 20s a 1 minuto.` });
     try {
       const r = await enviarReuniao(clienteId, arquivo, { titulo, data_reuniao: data });
       aoNovoDocumento({ ...r.documento, sugestoes: r.sugestoes, aplicadas: [] });
@@ -33,7 +40,7 @@ export default function Reunioes({ clienteId, documentos, ligado, aoNovoDocument
   return (
     <section className="bloco">
       <h2>Reuniões</h2>
-      <p className="vazio">Suba a transcrição de uma reunião com o cliente. A IA monta o resumo (decisões, pendências, objeções, orientações), guarda como documento e leva só o resumo para o cérebro. A transcrição bruta fica salva, mas fora da busca.</p>
+      <p className="vazio">Suba a transcrição ou a gravação (áudio/vídeo) de uma reunião com o cliente. A IA transcreve se precisar, monta o resumo (decisões, pendências, objeções, orientações), guarda como documento e leva só o resumo para o cérebro. A transcrição bruta fica salva, mas fora da busca.</p>
 
       {!ligado ? (
         <p className="aviso">O resumo de reuniões ainda não foi ligado no n8n (variável N8N_WEBHOOK_REUNIAO).</p>
@@ -51,7 +58,7 @@ export default function Reunioes({ clienteId, documentos, ligado, aoNovoDocument
           </div>
           <label className={`upload${enviando ? ' upload-ocupado' : ''}`}>
             <input ref={inputRef} type="file" className="upload-input" accept={EXTENSOES.join(',')} disabled={enviando} onChange={(e) => enviar(e.target.files?.[0])} />
-            {enviando ? <><span className="girando" aria-hidden="true" /> Resumindo…</> : <span><strong>Escolha a transcrição</strong> · TXT, MD, DOCX ou PDF</span>}
+            {enviando ? <><span className="girando" aria-hidden="true" /> Processando…</> : <span><strong>Escolha a transcrição ou a gravação</strong> · TXT, DOCX, PDF · MP3, M4A, WAV, MP4</span>}
           </label>
           {estado.mensagem && <p className={`aviso${estado.fase === 'erro' ? ' aviso-erro' : ''}`} role={estado.fase === 'erro' ? 'alert' : 'status'}>{estado.mensagem}</p>}
         </>

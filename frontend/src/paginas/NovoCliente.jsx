@@ -4,9 +4,11 @@ import { anexarDocumento, atualizarCliente, criarCliente, enviarReuniao, registr
 import FormCliente from './FormCliente.jsx';
 import { itensDe } from './SugestoesCadastro.jsx';
 
-const EXTENSOES = ['.pdf', '.docx', '.txt']; // o upload de documento não aceita .md
+const EXTENSOES_AUDIO = ['.mp3', '.m4a', '.wav', '.ogg', '.opus', '.aac', '.flac', '.mp4', '.webm', '.mov', '.mkv'];
+const EXTENSOES = ['.pdf', '.docx', '.txt', ...EXTENSOES_AUDIO]; // gravação só vale como reunião
 // Chute inicial do tipo pelo nome do arquivo; a pessoa pode trocar na lista.
-const tipoPeloNome = (nome) => (/reuni|transcri|anota|gemini|meet/i.test(nome) ? 'reuniao' : 'documento');
+const ehAudio = (nome) => EXTENSOES_AUDIO.includes(nome.slice(nome.lastIndexOf('.')).toLowerCase());
+const tipoPeloNome = (nome) => (ehAudio(nome) || /reuni|transcri|anota|gemini|meet/i.test(nome) ? 'reuniao' : 'documento');
 
 // Junta as sugestões de várias fontes num único pré-preenchimento do formulário.
 function mesclar(fontes) {
@@ -34,7 +36,7 @@ export default function NovoCliente() {
     const novos = [];
     for (const a of lista || []) {
       const ext = a.name.slice(a.name.lastIndexOf('.')).toLowerCase();
-      if (!EXTENSOES.includes(ext)) { setErro(`"${a.name}" não é aceito. Envie PDF, DOCX ou TXT.`); continue; }
+      if (!EXTENSOES.includes(ext)) { setErro(`"${a.name}" não é aceito. Envie PDF, DOCX, TXT ou uma gravação (MP3, M4A, WAV, MP4).`); continue; }
       if (!arquivos.some((x) => x.arquivo.name === a.name)) novos.push({ arquivo: a, tipo: tipoPeloNome(a.name), estado: 'fila', mensagem: '' });
     }
     if (novos.length) { setErro(''); setArquivos((l) => [...l, ...novos]); }
@@ -57,12 +59,14 @@ export default function NovoCliente() {
     for (let i = 0; i < arquivos.length; i++) {
       const item = arquivos[i];
       if (item.estado === 'ok') continue;
-      atualizarArquivo(i, { estado: 'lendo', mensagem: item.tipo === 'reuniao' ? 'resumindo a reunião…' : 'lendo o documento…' });
+      atualizarArquivo(i, { estado: 'lendo', mensagem: item.tipo === 'reuniao' ? (ehAudio(item.arquivo.name) ? 'transcrevendo a gravação (uns minutos)…' : 'resumindo a reunião…') : 'lendo o documento…' });
       try {
         if (item.tipo === 'reuniao') {
           const r = await enviarReuniao(c.id, item.arquivo, { titulo: item.arquivo.name.replace(/\.[^.]+$/, '') });
           if (r.sugestoes) recebidas.push({ sugestoes: r.sugestoes, registrar: (dados) => registrarSugestoes(r.documento.id, dados) });
           atualizarArquivo(i, { estado: 'ok', mensagem: r.indexado ? 'resumo no cérebro' : 'resumo salvo (não entrou no cérebro)' });
+        } else if (ehAudio(item.arquivo.name)) {
+          throw new Error('gravação só pode entrar como reunião — troque o tipo');
         } else {
           const r = await anexarDocumento(c.id, item.arquivo, { extrair: true });
           if (r.sugestoes?.sugestoes) recebidas.push({ sugestoes: r.sugestoes.sugestoes, registrar: (dados) => registrarSugestaoAnexo(c.id, r.sugestoes.id, dados) });
@@ -115,7 +119,7 @@ export default function NovoCliente() {
             <p className="form-ajuda">Transcrição de reunião (vira resumo no cérebro + sugestões), briefing, benchmark, proposta (entram no cérebro + sugestões). Relatórios semanais não entram aqui — suba depois, na página do cliente.</p>
             <label className={`upload${fase === 'processando' ? ' upload-ocupado' : ''}`}>
               <input ref={inputRef} type="file" className="upload-input" multiple accept={EXTENSOES.join(',')} disabled={fase === 'processando'} onChange={(e) => adicionar(e.target.files)} />
-              <span><strong>Escolha os arquivos</strong> · PDF, DOCX ou TXT · pode selecionar vários</span>
+              <span><strong>Escolha os arquivos</strong> · PDF, DOCX, TXT ou gravação (MP3, M4A, MP4) · pode selecionar vários</span>
             </label>
 
             {arquivos.length > 0 && (

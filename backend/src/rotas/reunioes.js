@@ -8,11 +8,13 @@ const router = express.Router();
 const { pool } = require('../servicos/db');
 const { resumirReuniaoViaN8n, anexarViaN8n } = require('../servicos/n8n');
 const { extrairTexto } = require('../servicos/texto');
+const { ehAudio, transcricaoConfigurada, transcreverGravacao, EXTENSOES_AUDIO } = require('../servicos/audio');
 const { markdownParaPdf } = require('../servicos/pdf');
 const { salvarPdf, salvarArquivo, lerPdf } = require('../servicos/storage');
 
-const EXTENSOES = ['.txt', '.md', '.docx', '.pdf'];
-const LIMITE_MB = 25;
+const EXTENSOES_TEXTO = ['.txt', '.md', '.docx', '.pdf'];
+const EXTENSOES = [...EXTENSOES_TEXTO, ...EXTENSOES_AUDIO]; // gravação: o cockpit fatia e o n8n transcreve
+const LIMITE_MB = 300; // vídeo de 1 h cabe; o ffmpeg reduz para áudio mono antes de mandar ao n8n
 const MIN_CHARS = 300; // transcrição menor que isso quase sempre é arquivo errado
 
 const upload = multer({
@@ -38,9 +40,16 @@ router.post('/clientes/:id/reunioes', (req, res) => {
       if (!rows.length) return res.status(404).json({ erro: 'cliente não encontrado' });
       const cliente = rows[0];
 
-      const transcricao = await extrairTexto(req.file.buffer, nome);
+      let transcricao, trechos = 0;
+      if (ehAudio(nome)) {
+        if (!transcricaoConfigurada()) return res.status(503).json({ erro: 'transcrição de áudio ainda não foi ligada no n8n (N8N_WEBHOOK_TRANSCREVER)' });
+        const r = await transcreverGravacao(req.file.buffer, nome, (i, n) => console.log(`[reunioes] transcrevendo trecho ${i + 1}/${n} de "${nome}"`));
+        transcricao = r.texto; trechos = r.trechos;
+      } else {
+        transcricao = await extrairTexto(req.file.buffer, nome);
+      }
       if (transcricao.length < MIN_CHARS)
-        return res.status(400).json({ erro: 'não consegui ler uma transcrição nesse arquivo (texto muito curto ou vazio)' });
+        return res.status(400).json({ erro: ehAudio(nome) ? 'a gravação foi transcrita, mas o texto ficou muito curto — confira se o áudio tem fala' : 'não consegui ler uma transcrição nesse arquivo (texto muito curto ou vazio)' });
 
       const titulo = texto(req.body?.titulo) || nome.replace(/\.[^.]+$/, '');
       const data_reuniao = texto(req.body?.data_reuniao);
@@ -54,7 +63,7 @@ router.post('/clientes/:id/reunioes', (req, res) => {
       const pdf = Buffer.from(await markdownParaPdf(markdown));
       const caminho = await salvarPdf(pdf, cliente.id, 'reuniao');
       const caminhoTranscricao = await salvarArquivo(Buffer.from(transcricao, 'utf8'), `transcricao-${cliente.id}.txt`);
-      const extras = { titulo, data_reuniao, transcricao: caminhoTranscricao, arquivo_original: nome, sugestoes, aplicadas: [] };
+      const extras = { titulo, data_reuniao, transcricao: caminhoTranscricao, arquivo_original: nome, trechos_audio: trechos || undefined, sugestoes, aplicadas: [] };
       const ins = await pool.query(
         `INSERT INTO documentos_gerados (cliente_id, cliente_nome, tipo, caminho, markdown, extras)
          VALUES ($1,$2,'reuniao',$3,$4,$5) RETURNING id, tipo, criado_em`,
