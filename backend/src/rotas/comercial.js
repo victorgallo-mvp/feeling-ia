@@ -101,6 +101,43 @@ router.get('/clientes/:id/comercial', async (req, res) => {
   }
 });
 
+// Dispara o workflow do n8n para um cliente. Lança erro se o n8n não aceitar.
+async function dispararClassificacao(cliente, baseUrl) {
+  const url = process.env.N8N_WEBHOOK_COMERCIAL;
+  const token = crypto.randomBytes(16).toString('hex');
+  await salvarEstado(cliente.id, { iniciado_em: new Date().toISOString(), concluido_em: null, erro: null, callback_token: token });
+  try {
+    const resp = await axios.post(url, {
+      cliente_id: cliente.id, cliente_nome: cliente.nome, conta_id: cliente.conta_id,
+      callback_url: `${baseUrl}/api/clientes/${cliente.id}/comercial/concluir`, callback_token: token,
+    }, { timeout: 30000, headers: { 'Content-Type': 'application/json' } });
+    if (!resp.data?.aceito) throw new Error('o n8n não aceitou o pedido');
+  } catch (e) {
+    await salvarEstado(cliente.id, { concluido_em: new Date().toISOString(), erro: e.message }).catch(() => {});
+    throw e;
+  }
+}
+
+// Rodada automática: uma vez por dia (06:30 em Brasília) para todos os clientes com WhatsApp ligado.
+// Precisa de PUBLIC_URL (o n8n chama o callback de fora). Só dispara; quem trabalha é o n8n.
+function agendarRodadaDiaria() {
+  if (!process.env.N8N_WEBHOOK_COMERCIAL || !clientesAtivos().length) return;
+  if (!process.env.PUBLIC_URL) { console.warn('[comercial] rodada diária desligada: defina PUBLIC_URL'); return; }
+  let ultimaData = null;
+  setInterval(async () => {
+    const agora = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+    const hoje = agora.toISOString().slice(0, 10);
+    if (agora.getHours() !== 6 || agora.getMinutes() < 30 || ultimaData === hoje) return;
+    ultimaData = hoje;
+    for (const id of clientesAtivos()) {
+      try {
+        const cliente = await buscarCliente(id);
+        if (cliente) { await dispararClassificacao(cliente, process.env.PUBLIC_URL.replace(/\/$/, '')); console.log(`[comercial] rodada diária disparada para ${cliente.nome}`); }
+      } catch (e) { console.error(`[comercial] rodada diária falhou para o cliente ${id}:`, e.message); }
+    }
+  }, 60 * 1000);
+}
+
 // POST /clientes/:id/comercial/classificar — dispara o workflow do n8n (assíncrono, callback com token).
 router.post('/clientes/:id/comercial/classificar', async (req, res) => {
   const url = process.env.N8N_WEBHOOK_COMERCIAL;
@@ -113,16 +150,7 @@ router.post('/clientes/:id/comercial/classificar', async (req, res) => {
       && Date.now() - new Date(cliente.comercial.iniciado_em).getTime() < 15 * 60 * 1000;
     if (emAndamento) return res.status(202).json({ ok: true, ja_em_andamento: true });
 
-    const token = crypto.randomBytes(16).toString('hex');
-    await salvarEstado(cliente.id, { iniciado_em: new Date().toISOString(), concluido_em: null, erro: null, callback_token: token });
-    const resp = await axios.post(url, {
-      cliente_id: cliente.id, cliente_nome: cliente.nome, conta_id: cliente.conta_id,
-      callback_url: `${urlPublica(req)}/api/clientes/${cliente.id}/comercial/concluir`, callback_token: token,
-    }, { timeout: 30000, headers: { 'Content-Type': 'application/json' } });
-    if (!resp.data?.aceito) {
-      await salvarEstado(cliente.id, { concluido_em: new Date().toISOString(), erro: 'o n8n não aceitou o pedido' });
-      return res.status(502).json({ erro: 'o n8n não aceitou o pedido' });
-    }
+    await dispararClassificacao(cliente, urlPublica(req));
     res.status(202).json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -154,3 +182,4 @@ router.post('/clientes/:id/comercial/concluir', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.agendarRodadaDiaria = agendarRodadaDiaria;

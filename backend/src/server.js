@@ -17,7 +17,8 @@ app.use('/api', require('./rotas/gerar'));
 app.use('/api', require('./rotas/documentos'));
 app.use('/api', require('./rotas/anexar'));
 app.use('/api', require('./rotas/reunioes'));
-app.use('/api', require('./rotas/comercial'));
+const comercial = require('./rotas/comercial');
+app.use('/api', comercial);
 
 app.use((req, res) => res.status(404).json({ erro: 'rota não encontrada' }));
 
@@ -35,6 +36,7 @@ migrar()
   .catch((e) => console.error('[db] migração falhou:', e.message))
   .finally(() => {
     const server = app.listen(PORT, () => console.log(`Cockpit Feeling backend na porta ${PORT}`));
+    comercial.agendarRodadaDiaria();
     // A geração espera o n8n por até 120s — o servidor não pode cortar antes.
     server.requestTimeout = 180000;
   });
