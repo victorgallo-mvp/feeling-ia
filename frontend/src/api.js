@@ -55,5 +55,5 @@ export const urlTranscricao = (doc) => `${API_URL}/api/documentos/${doc.id}/tran
 export const urlDownload = (doc) => API_URL + doc.url_download;
 
 // Aba Comercial (WhatsApp): leitura da tabela leads_comercial e disparo da classificação no n8n
-export const lerComercial = (id, dias = 7) => req(`/api/clientes/${id}/comercial?dias=${dias}`);
+export const lerComercial = (id, periodo = 'semana') => req(`/api/clientes/${id}/comercial?periodo=${periodo}`);
 export const classificarComercial = (id) => req(`/api/clientes/${id}/comercial/classificar`, { method: 'POST' });

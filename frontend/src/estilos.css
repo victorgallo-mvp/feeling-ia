@@ -283,3 +283,8 @@ code {
 .linha-clicavel:hover td { background: var(--fundo); }
 .linha-detalhe td { background: var(--fundo); }
 .linha-detalhe p { margin: 4px 0; }
+.kpi-alerta .kpi-valor { color: var(--erro); }
+.titulo-foco { margin-top: 18px; padding-top: 14px; border-top: 2px solid #2f6f6a; }
+.organico-topo { margin-top: 26px; padding-top: 14px; border-top: 1px solid var(--linha); }
+.celula-anuncio { max-width: 260px; font-size: 13px; }
+.bloco h4 { margin: 14px 0 6px; font-size: 14px; }

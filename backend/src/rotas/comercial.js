@@ -38,60 +38,113 @@ async function salvarEstado(clienteId, patch) {
 
 const mascarar = (tel) => (tel && tel.length > 6 ? `${tel.slice(0, tel.length - 4).replace(/\d/g, (d, i) => (i < 4 ? d : '•'))}${tel.slice(-4)}` : tel);
 
-// GET /clientes/:id/comercial?dias=7|30|90 — KPIs, funil, alertas e lista de leads do período.
+// Períodos em horário de Brasília. "semana" e "mes" são fechados (batem com os relatórios); "7d"/"30d" são rolantes.
+function intervalo(periodo) {
+  const agora = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+  const hoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
+  let ini, fim; // [ini, fim)
+  if (periodo === 'semana') { // semana passada, segunda a domingo
+    const dow = (hoje.getDay() + 6) % 7; // 0 = segunda
+    fim = new Date(hoje); fim.setDate(hoje.getDate() - dow);
+    ini = new Date(fim); ini.setDate(fim.getDate() - 7);
+  } else if (periodo === 'mes') { // mês passado
+    ini = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+    fim = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+  } else {
+    const dias = periodo === '30d' ? 30 : 7;
+    fim = new Date(hoje); fim.setDate(hoje.getDate() + 1); // inclui hoje
+    ini = new Date(fim); ini.setDate(fim.getDate() - dias);
+  }
+  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const rotulos = { semana: 'semana passada (seg–dom)', mes: 'mês passado', '30d': 'últimos 30 dias', '7d': 'últimos 7 dias' };
+  return { periodo, ini: iso(ini), fim: iso(fim), rotulo: rotulos[periodo] || rotulos['7d'] };
+}
+
+// KPIs + funil de um conjunto de leads (anúncio, orgânico ou todos).
+function resumir(leads) {
+  const n = leads.length;
+  const de = (f) => leads.filter(f).length;
+  const media = (vals) => (vals.length ? Math.round(vals.reduce((s, v) => s + v, 0) / vals.length) : null);
+  const responderam = de((l) => l.msgs_lead > 1);
+  const funil = Object.fromEntries(ETAPAS.map((e) => [e, de((l) => l.etapa === e)]));
+  const notas = leads.filter((l) => l.nota_atendimento != null).map((l) => l.nota_atendimento);
+  return {
+    leads: n,
+    responderam,
+    pct_responderam: n ? Math.round((100 * responderam) / n) : null,
+    com_humano: de((l) => l.msgs_humano > 0),
+    tempo_medio_resposta_humana_min: media(leads.filter((l) => l.primeira_resposta_humana_seg != null).map((l) => l.primeira_resposta_humana_seg / 60)),
+    qualificados: de((l) => ETAPAS_AVANCO.includes(l.etapa)),
+    agendaram: funil.agendou + funil.comprou,
+    compraram: funil.comprou,
+    esfriaram: funil.esfriou,
+    esperando: de((l) => l.aguardando_resposta_h >= 2 && !['perdido', 'comprou'].includes(l.etapa)),
+    nota_media: notas.length ? Math.round((notas.reduce((s, x) => s + x, 0) / notas.length) * 10) / 10 : null,
+    sem_classificar: de((l) => !l.etapa),
+    funil,
+  };
+}
+
+const contar = (leads, chave) => {
+  const m = new Map();
+  for (const l of leads) { const k = (l[chave] || '').trim(); if (k) m.set(k, (m.get(k) || 0) + 1); }
+  return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([valor, qtd]) => ({ valor, qtd }));
+};
+
+// GET /clientes/:id/comercial?periodo=7d|semana|30d|mes — separado por origem, com foco em anúncio.
 router.get('/clientes/:id/comercial', async (req, res) => {
-  const dias = [7, 30, 90].includes(Number(req.query.dias)) ? Number(req.query.dias) : 7;
+  const periodo = ['7d', 'semana', '30d', 'mes'].includes(req.query.periodo) ? req.query.periodo
+    : (Number(req.query.dias) === 30 ? '30d' : '7d');
   try {
     const cliente = await buscarCliente(req.params.id);
     if (!cliente) return res.status(404).json({ erro: 'cliente não encontrado' });
     if (!cliente.whatsapp_ativo) return res.json({ ativo: false });
 
+    const janela = intervalo(periodo);
     const { rows: leads } = await pool.query(
       `SELECT * FROM leads_comercial
-        WHERE cliente_id = $1 AND primeiro_contato >= now() - ($2 || ' days')::interval
+        WHERE cliente_id = $1
+          AND (primeiro_contato AT TIME ZONE 'America/Sao_Paulo') >= $2::date
+          AND (primeiro_contato AT TIME ZONE 'America/Sao_Paulo') <  $3::date
         ORDER BY primeiro_contato DESC`,
-      [cliente.id, String(dias)]
+      [cliente.id, janela.ini, janela.fim]
     );
     const { rows: [{ total_geral }] } = await pool.query('SELECT count(*)::int AS total_geral FROM leads_comercial WHERE cliente_id = $1', [cliente.id]);
 
-    const n = leads.length;
-    const de = (f) => leads.filter(f).length;
-    const media = (vals) => (vals.length ? Math.round(vals.reduce((s, v) => s + v, 0) / vals.length) : null);
-    const respondidos = de((l) => l.msgs_lead > 1); // voltou a falar depois da 1ª mensagem
-    const funil = Object.fromEntries(ETAPAS.map((e) => [e, de((l) => l.etapa === e)]));
-    const kpis = {
-      leads: n,
-      de_anuncio: de((l) => l.origem === 'anuncio'),
-      responderam: respondidos,
-      pct_responderam: n ? Math.round((100 * respondidos) / n) : null,
-      avancaram: de((l) => ETAPAS_AVANCO.includes(l.etapa)),
-      compraram: funil.comprou,
-      com_atendimento_humano: de((l) => l.msgs_humano > 0),
-      tempo_medio_resposta_humana_min: media(leads.filter((l) => l.primeira_resposta_humana_seg != null).map((l) => l.primeira_resposta_humana_seg / 60)),
-      nota_media_atendimento: (() => { const v = leads.filter((l) => l.nota_atendimento != null).map((l) => l.nota_atendimento); return v.length ? Math.round((v.reduce((s, x) => s + x, 0) / v.length) * 10) / 10 : null; })(),
-      sem_classificar: de((l) => !l.etapa),
-    };
-    const contar = (chave) => {
-      const m = new Map();
-      for (const l of leads) { const k = (l[chave] || '').trim(); if (k) m.set(k, (m.get(k) || 0) + 1); }
-      return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([valor, qtd]) => ({ valor, qtd }));
-    };
-    const alertas = [];
-    for (const l of leads) {
-      if (l.aguardando_resposta_h >= 2 && l.etapa !== 'perdido') alertas.push({ tipo: 'sem_resposta', contato: mascarar(l.contato), nome: l.nome, horas: l.aguardando_resposta_h, etapa: l.etapa });
-      else if (l.etapa === 'qualificado' && l.msgs_humano === 0) alertas.push({ tipo: 'qualificado_sem_humano', contato: mascarar(l.contato), nome: l.nome, interesse: l.interesse });
+    const anuncio = leads.filter((l) => l.origem === 'anuncio');
+    const organico = leads.filter((l) => l.origem !== 'anuncio');
+
+    // Uma linha por anúncio: o que a Feeling é cobrada.
+    const porAnuncio = new Map();
+    for (const l of anuncio) {
+      const k = (l.anuncio || '').trim();
+      if (!porAnuncio.has(k)) porAnuncio.set(k, []);
+      porAnuncio.get(k).push(l);
     }
+    const por_anuncio = [...porAnuncio.entries()]
+      .map(([texto, ls]) => ({ anuncio: texto, ...resumir(ls) }))
+      .sort((a, b) => b.leads - a.leads);
+
+    const alerta = (l) => {
+      if (l.aguardando_resposta_h >= 2 && !['perdido', 'comprou'].includes(l.etapa))
+        return { tipo: 'sem_resposta', origem: l.origem, contato: mascarar(l.contato), nome: l.nome, horas: l.aguardando_resposta_h, etapa: l.etapa, interesse: l.interesse };
+      if (l.etapa === 'qualificado' && l.msgs_humano === 0)
+        return { tipo: 'qualificado_sem_humano', origem: l.origem, contato: mascarar(l.contato), nome: l.nome, interesse: l.interesse };
+      return null;
+    };
+    const alertas = leads.map(alerta).filter(Boolean)
+      .sort((a, b) => ((a.origem === 'anuncio' ? 0 : 1) - (b.origem === 'anuncio' ? 0 : 1)) || ((b.horas || 0) - (a.horas || 0)))
+      .slice(0, 25);
 
     res.json({
       ativo: true,
-      periodo_dias: dias,
+      periodo: janela,
       classificacao: { ...cliente.comercial, total_leads_tabela: total_geral },
-      kpis,
-      funil,
-      interesses: contar('interesse'),
-      objecoes: contar('objecao'),
-      anuncios: contar('anuncio'),
-      alertas: alertas.sort((a, b) => (b.horas || 0) - (a.horas || 0)).slice(0, 20),
+      anuncio: { ...resumir(anuncio), interesses: contar(anuncio, 'interesse'), objecoes: contar(anuncio, 'objecao') },
+      organico: { ...resumir(organico), interesses: contar(organico, 'interesse'), objecoes: contar(organico, 'objecao') },
+      todos: resumir(leads),
+      por_anuncio,
+      alertas,
       leads: leads.map((l) => ({ ...l, contato: mascarar(l.contato), perfil: undefined })),
     });
   } catch (e) {
@@ -154,7 +207,6 @@ router.post('/clientes/:id/comercial/classificar', async (req, res) => {
     res.status(202).json({ ok: true });
   } catch (e) {
     console.error(e);
-    await salvarEstado(req.params.id, { concluido_em: new Date().toISOString(), erro: e.message }).catch(() => {});
     res.status(502).json({ erro: `não deu para chamar o n8n: ${e.message}` });
   }
 });
