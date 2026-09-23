@@ -299,12 +299,20 @@ code {
 .imagem-aprovada { border-color: #2f6f6a; }
 .linha-feedback { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
 .linha-feedback input { flex: 1 1 260px; }
-.grade-copy { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; margin: 8px 0; }
-.copy-opcao { display: flex; flex-direction: column; gap: 4px; padding: 12px; border: 2px solid var(--linha); border-radius: 8px; cursor: pointer; background: var(--papel); font-size: 14px; }
-.copy-opcao input { display: none; }
-.copy-opcao strong { font-size: 15px; }
-.copy-opcao em { color: #2f6f6a; font-style: normal; font-weight: 600; }
+.grade-copy { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; margin: 8px 0; }
+.copy-versao { padding: 14px; border: 2px solid var(--linha); border-radius: 8px; background: var(--papel); font-size: 14px; }
+.copy-versao .bloco-topo { margin: 0 0 8px; }
+.copy-titulo { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.copy-titulo strong { font-size: 15px; }
+.copy-headline { font-size: 17px; font-weight: 700; line-height: 1.25; margin: 4px 0; }
+.copy-texto { margin: 6px 0; }
+.copy-cta { color: #2f6f6a; font-weight: 700; margin: 6px 0; }
+.copy-legenda summary { cursor: pointer; font-size: 13px; color: var(--texto-suave); }
+.copy-legenda p { margin-top: 6px; white-space: pre-wrap; font-size: 13px; }
+.copy-versao .doc-data { margin-top: 8px; }
 .copy-escolhida { border-color: #2f6f6a; background: var(--fundo); }
+.copy-aprovada { border-color: #2f6f6a; }
+.bloco-versao { margin: 14px 0; padding-left: 12px; border-left: 3px solid var(--linha); }
 
 /* abas do topo e prospecção */
 .topo-interno { display: flex; align-items: center; gap: 28px; max-width: 912px; margin: 0 auto; }

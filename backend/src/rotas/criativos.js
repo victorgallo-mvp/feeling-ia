@@ -1,18 +1,28 @@
 // src/rotas/criativos.js
-// Criativos: contexto -> imagens (n8n, assíncrono) -> aprovação humana -> copy (n8n) -> escolha -> arte (cockpit).
-// O cockpit guarda arquivos no Postgres (tabela arquivos) e monta a arte final em template HTML; a IA fica no n8n.
+// Criativos: contexto -> COPY primeiro (n8n lê o material do cliente e devolve 3 ângulos) -> a pessoa edita e
+// aprova as que quiser -> imagens por copy aprovada (n8n) -> escolhe a imagem -> artes no template (cockpit).
+// O cockpit junta o material (briefing, análise de presença, pesquisa, reunião) e guarda arquivos no Postgres; a IA fica no n8n.
 const crypto = require('crypto');
 const express = require('express');
 const multer = require('multer');
 const axios = require('axios');
 const router = express.Router();
 const { pool } = require('../servicos/db');
-const { montarArtes, FORMATOS } = require('../servicos/arte');
+const { montarLote, FORMATOS, LAYOUTS } = require('../servicos/arte');
 
 const OBJETIVOS = ['vendas', 'mensagens', 'leads', 'reconhecimento'];
 const FORMATOS_PEDIDO = ['feed', 'stories', 'ambos'];
 const MAX_FOTOS = 3;
 const TEMPO_MAXIMO_MIN = 10;
+const COPIES_POR_RODADA = 3;
+const IMAGENS_POR_COPY = 2;
+// Material que alimenta a copy, na ordem em que entra no prompt, com o corte de cada um.
+const MATERIAL = [
+  { tipo: 'briefing', rotulo: 'Briefing do cliente', limite: 6000 },
+  { tipo: 'analise', rotulo: 'Análise de presença digital', limite: 6000 },
+  { tipo: 'reuniao', rotulo: 'Resumo de reunião', limite: 6000 },
+  { tipo: 'pesquisa', rotulo: 'Pesquisa de mercado', limite: 9000 },
+];
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 12 * 1024 * 1024, files: MAX_FOTOS } }).array('fotos', MAX_FOTOS);
 
@@ -31,7 +41,6 @@ async function salvarArquivo(criativoId, tipo, nome, mime, dados) {
   );
   return rows[0];
 }
-const urlArquivo = (base, a) => `${base}/api/arquivos/${a.id}/${a.token}`;
 
 async function buscarCriativo(id) {
   const { rows } = await pool.query('SELECT * FROM criativos WHERE id = $1', [id]);
@@ -44,7 +53,7 @@ async function atualizar(id, patch) {
   await pool.query(`UPDATE criativos SET ${sets}, atualizado_em = now() WHERE id = $1`, [id, ...valores]);
 }
 
-// Resposta pública do criativo: troca ids de arquivo por URLs.
+// Resposta pública do criativo: troca ids de arquivo por URLs e esconde o token do callback.
 function apresentar(c, base) {
   const comUrl = (a) => (a && a.arquivo_id ? { ...a, url: `${base}/api/arquivos/${a.arquivo_id}/${a.token}` } : a);
   return {
@@ -53,6 +62,7 @@ function apresentar(c, base) {
     fotos: (c.contexto?.fotos || []).map(comUrl),
     imagens: (c.imagens || []).map(comUrl),
     artes: (c.artes || []).map(comUrl),
+    layouts: LAYOUTS,
   };
 }
 
@@ -61,25 +71,66 @@ async function clienteDe(id) {
   return rows[0] || null;
 }
 
-// Dispara a geração de imagens no n8n (rodada nova ou refazer com feedback).
-async function pedirImagens(req, criativo, cliente, { feedback = '', prompt_anterior = '' } = {}) {
-  const url = process.env.N8N_WEBHOOK_CRIATIVO_IMAGEM;
-  if (!url) throw new Error('N8N_WEBHOOK_CRIATIVO_IMAGEM não configurado');
+// Junta o material do cliente que já está no cockpit: o documento mais recente de cada tipo.
+// Os anexos do cliente ficam no cérebro e são consultados pelo n8n (busca semântica pelo produto do criativo).
+async function materialDoCliente(clienteId) {
+  const { rows } = await pool.query(
+    `SELECT DISTINCT ON (tipo) tipo, criado_em, markdown
+       FROM documentos_gerados
+      WHERE cliente_id = $1 AND estado = 'ok' AND markdown IS NOT NULL AND tipo = ANY($2)
+      ORDER BY tipo, criado_em DESC`,
+    [clienteId, MATERIAL.map((m) => m.tipo)]
+  );
+  const material = [];
+  for (const m of MATERIAL) {
+    const d = rows.find((r) => r.tipo === m.tipo);
+    if (!d) continue;
+    material.push({
+      tipo: m.tipo, rotulo: m.rotulo,
+      data: new Date(d.criado_em).toISOString().slice(0, 10),
+      texto: String(d.markdown).slice(0, m.limite),
+      cortado: String(d.markdown).length > m.limite,
+    });
+  }
+  return material;
+}
+
+// Dispara a escrita da copy no n8n (assíncrono: o n8n responde {aceito:true} e chama o callback depois).
+async function pedirCopy(req, criativo, cliente, feedback = '') {
+  const url = process.env.N8N_WEBHOOK_CRIATIVO_COPY;
+  if (!url) throw new Error('N8N_WEBHOOK_CRIATIVO_COPY não configurado');
   const token = crypto.randomBytes(16).toString('hex');
-  await atualizar(criativo.id, { estado: 'imagem_gerando', erro: null, callback_token: token });
+  await atualizar(criativo.id, { estado: 'copy_gerando', erro: null, callback_token: token });
   const base = urlPublica(req);
-  const fotos = (criativo.contexto?.fotos || []).map((f) => `${base}/api/arquivos/${f.arquivo_id}/${f.token}`);
   const { fotos: _f, ...contexto } = criativo.contexto || {};
+  const material = await materialDoCliente(cliente.id);
+  const anteriores = (criativo.copy?.versoes || []).map((v) => v.headline).filter(Boolean).slice(0, 6);
   const resp = await axios.post(url, {
     criativo_id: criativo.id, cliente_id: cliente.id, cliente_nome: cliente.nome,
     perfil: cliente.perfil || '', orientacoes: cliente.orientacoes || '',
-    contexto, fotos, feedback, prompt_anterior, quantidade: 2,
-    callback_url: `${base}/api/criativos/${criativo.id}/imagens/concluir`, callback_token: token,
+    contexto, material, quantidade: COPIES_POR_RODADA, feedback, headlines_anteriores: anteriores,
+    callback_url: `${base}/api/criativos/${criativo.id}/copy/concluir`, callback_token: token,
   }, { timeout: 30000, headers: { 'Content-Type': 'application/json' } });
-  if (!resp.data?.aceito) throw new Error('o n8n não aceitou o pedido de imagem');
+  if (!resp.data?.aceito) throw new Error('o n8n não aceitou o pedido de copy');
 }
 
-// POST /clientes/:id/criativos — multipart: campos do contexto + fotos[] (opcional)
+// Dispara a geração de imagens de UMA copy aprovada (uma chamada por versão; cada uma chama o callback).
+async function pedirImagensDaVersao(base, criativo, cliente, versao, { feedback = '' } = {}) {
+  const url = process.env.N8N_WEBHOOK_CRIATIVO_IMAGEM;
+  if (!url) throw new Error('N8N_WEBHOOK_CRIATIVO_IMAGEM não configurado');
+  const fotos = (criativo.contexto?.fotos || []).map((f) => `${base}/api/arquivos/${f.arquivo_id}/${f.token}`);
+  const { fotos: _f, ...contexto } = criativo.contexto || {};
+  const resp = await axios.post(url, {
+    criativo_id: criativo.id, versao_id: versao.id, cliente_id: cliente.id, cliente_nome: cliente.nome,
+    perfil: cliente.perfil || '', orientacoes: cliente.orientacoes || '',
+    contexto, fotos, quantidade: IMAGENS_POR_COPY, feedback,
+    copy: { angulo: versao.angulo, headline: versao.headline, texto: versao.texto, cta: versao.cta, direcao_imagem: versao.direcao_imagem },
+    callback_url: `${base}/api/criativos/${criativo.id}/imagens/concluir`, callback_token: criativo.callback_token,
+  }, { timeout: 30000, headers: { 'Content-Type': 'application/json' } });
+  if (!resp.data?.aceito) throw new Error(`o n8n não aceitou o pedido de imagem da versão ${versao.id}`);
+}
+
+// POST /clientes/:id/criativos — multipart: campos do contexto + fotos[] (opcional). Começa pela copy.
 router.post('/clientes/:id/criativos', (req, res) => {
   upload(req, res, async (erroUpload) => {
     if (erroUpload) return res.status(400).json({ erro: erroUpload.code === 'LIMIT_FILE_SIZE' ? 'foto maior que 12 MB' : 'upload inválido' });
@@ -97,7 +148,7 @@ router.post('/clientes/:id/criativos', (req, res) => {
       const titulo = texto(b.titulo, 120) || contexto.produto;
 
       const ins = await pool.query(
-        `INSERT INTO criativos (cliente_id, titulo, estado, contexto) VALUES ($1,$2,'imagem_gerando',$3) RETURNING id`,
+        `INSERT INTO criativos (cliente_id, titulo, estado, contexto) VALUES ($1,$2,'copy_gerando',$3) RETURNING id`,
         [cliente.id, titulo, JSON.stringify(contexto)]
       );
       const id = ins.rows[0].id;
@@ -107,8 +158,7 @@ router.post('/clientes/:id/criativos', (req, res) => {
         contexto.fotos.push({ arquivo_id: a.id, token: a.token, nome: f.originalname });
       }
       await atualizar(id, { contexto });
-      const criativo = await buscarCriativo(id);
-      try { await pedirImagens(req, criativo, cliente); }
+      try { await pedirCopy(req, await buscarCriativo(id), cliente); }
       catch (e) { await atualizar(id, { estado: 'erro', erro: e.message }); }
       res.status(202).json(apresentar(await buscarCriativo(id), urlPublica(req)));
     } catch (e) {
@@ -122,7 +172,7 @@ router.get('/clientes/:id/criativos', async (req, res) => {
   try {
     await pool.query(
       `UPDATE criativos SET estado = 'erro', erro = 'o n8n não respondeu em ${TEMPO_MAXIMO_MIN} minutos'
-       WHERE cliente_id = $1 AND estado = 'imagem_gerando' AND atualizado_em < now() - interval '${TEMPO_MAXIMO_MIN} minutes'`, [req.params.id]);
+       WHERE cliente_id = $1 AND estado IN ('copy_gerando','imagem_gerando') AND atualizado_em < now() - interval '${TEMPO_MAXIMO_MIN} minutes'`, [req.params.id]);
     const { rows } = await pool.query('SELECT * FROM criativos WHERE cliente_id = $1 ORDER BY id DESC LIMIT 50', [req.params.id]);
     res.json(rows.map((c) => apresentar(c, urlPublica(req))));
   } catch (e) { res.status(500).json({ erro: e.message }); }
@@ -149,115 +199,223 @@ router.get('/arquivos/:id/:token', async (req, res) => {
   } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
-// Callback do n8n com as imagens em base64.
+const conferirToken = (c, req) => {
+  const token = req.get('x-cockpit-token') || req.body?.callback_token;
+  return !!c.callback_token && token === c.callback_token;
+};
+
+// Callback do n8n com as versões de copy.
+router.post('/criativos/:id/copy/concluir', async (req, res) => {
+  try {
+    const c = await buscarCriativo(req.params.id);
+    if (!c) return res.status(404).json({ erro: 'criativo não encontrado' });
+    if (!conferirToken(c, req)) return res.status(403).json({ erro: 'token inválido' });
+    const b = req.body || {};
+    const rodada = c.rodada || 1;
+    const versoes = (Array.isArray(b.versoes) ? b.versoes : []).slice(0, 5).map((v, i) => ({
+      id: `r${rodada}v${i + 1}`,
+      angulo: texto(v.angulo, 60) || `versão ${i + 1}`,
+      headline: texto(v.headline, 80), texto: texto(v.texto, 200), cta: texto(v.cta, 30),
+      legenda: texto(v.legenda, 1200), racional: texto(v.racional, 400), direcao_imagem: texto(v.direcao_imagem, 500),
+      aprovada: false, editada: false, rodada,
+    })).filter((v) => v.headline);
+    if (!versoes.length) {
+      await atualizar(c.id, { estado: 'erro', erro: String(b.erro || 'o n8n não devolveu versões de copy').slice(0, 400), callback_token: null });
+      return res.json({ ok: true });
+    }
+    const fontes = Array.isArray(b.fontes) ? b.fontes.slice(0, 12).map((f) => texto(f, 120)).filter(Boolean) : [];
+    await atualizar(c.id, {
+      copy: { rodada, versoes: [...(c.copy?.versoes || []).filter((v) => v.rodada !== rodada), ...versoes], fontes },
+      estado: 'copy_pendente', erro: null,
+    });
+    res.json({ ok: true });
+  } catch (e) { console.error(e); res.status(500).json({ erro: e.message }); }
+});
+
+// Novas versões de copy, com feedback (nova rodada; as anteriores ficam no histórico).
+router.post('/criativos/:id/copy/refazer', async (req, res) => {
+  try {
+    const c = await buscarCriativo(req.params.id);
+    if (!c) return res.status(404).json({ erro: 'criativo não encontrado' });
+    if (c.estado === 'copy_gerando') return res.status(409).json({ erro: 'ainda escrevendo' });
+    const cliente = await clienteDe(c.cliente_id);
+    await atualizar(c.id, { rodada: (c.rodada || 1) + 1 });
+    await pedirCopy(req, await buscarCriativo(c.id), cliente, texto(req.body?.feedback, 600));
+    res.status(202).json(apresentar(await buscarCriativo(c.id), urlPublica(req)));
+  } catch (e) { console.error(e); await atualizar(req.params.id, { estado: 'erro', erro: e.message }).catch(() => {}); res.status(502).json({ erro: e.message }); }
+});
+
+// Editar uma versão de copy à mão (a pessoa manda o texto final).
+router.put('/criativos/:id/copy/:versaoId', async (req, res) => {
+  try {
+    const c = await buscarCriativo(req.params.id);
+    if (!c) return res.status(404).json({ erro: 'criativo não encontrado' });
+    const b = req.body || {};
+    let achou = false;
+    const versoes = (c.copy?.versoes || []).map((v) => {
+      if (v.id !== req.params.versaoId) return v;
+      achou = true;
+      const nova = {
+        ...v,
+        headline: texto(b.headline, 80) || v.headline,
+        texto: b.texto === '' ? '' : (texto(b.texto, 200) || v.texto),
+        cta: b.cta === '' ? '' : (texto(b.cta, 30) || v.cta),
+        legenda: b.legenda === '' ? '' : (texto(b.legenda, 1200) || v.legenda),
+      };
+      nova.editada = nova.headline !== v.headline || nova.texto !== v.texto || nova.cta !== v.cta || nova.legenda !== v.legenda || v.editada;
+      return nova;
+    });
+    if (!achou) return res.status(404).json({ erro: 'versão de copy não encontrada' });
+    await atualizar(c.id, { copy: { ...(c.copy || {}), versoes } });
+    res.json(apresentar(await buscarCriativo(c.id), urlPublica(req)));
+  } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
+// Aprovar as copies escolhidas -> pede as imagens de cada uma (uma chamada por versão).
+router.post('/criativos/:id/copy/aprovar', async (req, res) => {
+  try {
+    const c = await buscarCriativo(req.params.id);
+    if (!c) return res.status(404).json({ erro: 'criativo não encontrado' });
+    const pedidas = Array.isArray(req.body?.versoes) ? req.body.versoes.map(String) : [];
+    if (!pedidas.length) return res.status(400).json({ erro: 'marque ao menos uma versão de copy' });
+    const versoes = (c.copy?.versoes || []).map((v) => ({ ...v, aprovada: pedidas.includes(String(v.id)) }));
+    const aprovadas = versoes.filter((v) => v.aprovada);
+    if (!aprovadas.length) return res.status(404).json({ erro: 'nenhuma das versões marcadas existe neste criativo' });
+
+    const cliente = await clienteDe(c.cliente_id);
+    const token = crypto.randomBytes(16).toString('hex');
+    // Imagens de versões que saíram da seleção são descartadas; as que já têm imagem não geram de novo
+    // (assim dá para voltar aqui e acrescentar um ângulo sem refazer o que estava aprovado).
+    const imagens = (c.imagens || []).filter((i) => pedidas.includes(String(i.versao_id)));
+    const pendentes = aprovadas.filter((v) => !imagens.some((i) => i.versao_id === v.id));
+    await atualizar(c.id, {
+      copy: { ...(c.copy || {}), versoes }, imagens,
+      estado: pendentes.length ? 'imagem_gerando' : 'imagem_pendente',
+      erro: null, callback_token: pendentes.length ? token : null,
+    });
+    if (!pendentes.length) return res.json(apresentar(await buscarCriativo(c.id), urlPublica(req)));
+
+    const criativo = await buscarCriativo(c.id);
+    const base = urlPublica(req);
+    const falhas = [];
+    for (const v of pendentes) {
+      try { await pedirImagensDaVersao(base, criativo, cliente, v); }
+      catch (e) { falhas.push(`${v.angulo}: ${e.message}`); }
+    }
+    if (falhas.length === pendentes.length) await atualizar(c.id, { estado: 'erro', erro: falhas.join(' | ').slice(0, 400) });
+    else if (falhas.length) await atualizar(c.id, { erro: `algumas versões falharam — ${falhas.join(' | ')}`.slice(0, 400) });
+    res.status(202).json(apresentar(await buscarCriativo(c.id), urlPublica(req)));
+  } catch (e) { console.error(e); res.status(502).json({ erro: e.message }); }
+});
+
+// Callback do n8n com as imagens em base64 de UMA versão de copy.
 router.post('/criativos/:id/imagens/concluir', async (req, res) => {
   try {
     const c = await buscarCriativo(req.params.id);
     if (!c) return res.status(404).json({ erro: 'criativo não encontrado' });
-    const token = req.get('x-cockpit-token') || req.body?.callback_token;
-    if (!c.callback_token || token !== c.callback_token) return res.status(403).json({ erro: 'token inválido' });
+    if (!conferirToken(c, req)) return res.status(403).json({ erro: 'token inválido' });
     const b = req.body || {};
+    const versaoId = texto(b.versao_id, 20);
+    const versoes = c.copy?.versoes || [];
+    const versao = versoes.find((v) => String(v.id) === versaoId) || versoes.find((v) => v.aprovada);
+    if (!versao) return res.status(400).json({ erro: 'versao_id não corresponde a nenhuma copy aprovada' });
+
     const novas = [];
     for (const img of Array.isArray(b.imagens) ? b.imagens.slice(0, 4) : []) {
       if (!img?.base64) continue;
       const dados = Buffer.from(String(img.base64).replace(/^data:[^,]+,/, ''), 'base64');
       if (dados.length < 1000) continue;
-      const a = await salvarArquivo(c.id, 'imagem', `imagem-${c.rodada}-${novas.length + 1}.png`, img.mime || 'image/png', dados);
-      novas.push({ arquivo_id: a.id, token: a.token, prompt: img.prompt || b.prompt || '', racional: b.racional || '', aprovada: false, rodada: c.rodada, criado_em: new Date().toISOString() });
+      const a = await salvarArquivo(c.id, 'imagem', `${versao.id}-${novas.length + 1}.png`, img.mime || 'image/png', dados);
+      novas.push({ versao_id: versao.id, arquivo_id: a.id, token: a.token, prompt: img.prompt || b.prompt || '', escolhida: false, rodada: c.rodada || 1, criado_em: new Date().toISOString() });
     }
-    if (!novas.length) {
-      await atualizar(c.id, { estado: 'erro', erro: String(b.erro || 'o n8n não devolveu imagens').slice(0, 400), callback_token: null });
-      return res.json({ ok: true });
+    const imagens = [...(c.imagens || []), ...novas];
+    const aprovadas = versoes.filter((v) => v.aprovada);
+    const prontas = aprovadas.filter((v) => imagens.some((i) => i.versao_id === v.id)).length;
+    const patch = { imagens };
+    if (!novas.length && !imagens.some((i) => i.versao_id === versao.id)) {
+      patch.erro = `${versao.angulo}: ${String(b.erro || 'o n8n não devolveu imagens').slice(0, 200)}`;
     }
-    await atualizar(c.id, { imagens: [...(c.imagens || []), ...novas], estado: 'imagem_pendente', erro: null, callback_token: null });
+    // Só sai de "gerando" quando todas as copies aprovadas tiverem imagem (ou o tempo máximo estourar).
+    if (prontas >= aprovadas.length) { patch.estado = 'imagem_pendente'; patch.callback_token = null; }
+    await atualizar(c.id, patch);
     res.json({ ok: true });
   } catch (e) { console.error(e); res.status(500).json({ erro: e.message }); }
 });
 
-// Refazer imagens com feedback (nova rodada).
+// Refazer as imagens de uma versão (com feedback).
 router.post('/criativos/:id/imagens/refazer', async (req, res) => {
   try {
     const c = await buscarCriativo(req.params.id);
     if (!c) return res.status(404).json({ erro: 'criativo não encontrado' });
     if (c.estado === 'imagem_gerando') return res.status(409).json({ erro: 'ainda gerando' });
+    const versao = (c.copy?.versoes || []).find((v) => String(v.id) === String(req.body?.versao_id) && v.aprovada);
+    if (!versao) return res.status(400).json({ erro: 'informe a versão de copy aprovada que quer refazer' });
     const cliente = await clienteDe(c.cliente_id);
-    const feedback = texto(req.body?.feedback, 600);
-    const ultima = (c.imagens || []).slice(-1)[0];
-    await atualizar(c.id, { rodada: (c.rodada || 1) + 1 });
-    await pedirImagens(req, await buscarCriativo(c.id), cliente, { feedback, prompt_anterior: ultima?.prompt || '' });
+    const token = crypto.randomBytes(16).toString('hex');
+    const imagens = (c.imagens || []).filter((i) => i.versao_id !== versao.id);
+    await atualizar(c.id, { imagens, estado: 'imagem_gerando', erro: null, callback_token: token });
+    await pedirImagensDaVersao(urlPublica(req), await buscarCriativo(c.id), cliente, versao, { feedback: texto(req.body?.feedback, 600) });
     res.status(202).json(apresentar(await buscarCriativo(c.id), urlPublica(req)));
   } catch (e) { console.error(e); await atualizar(req.params.id, { estado: 'erro', erro: e.message }).catch(() => {}); res.status(502).json({ erro: e.message }); }
 });
 
-// Aprovar uma imagem -> pede a copy no n8n (síncrono, ~15 s).
-router.post('/criativos/:id/imagens/:arquivoId/aprovar', async (req, res) => {
+// Escolher a imagem de uma versão (uma por versão de copy).
+router.post('/criativos/:id/imagens/:arquivoId/escolher', async (req, res) => {
   try {
     const c = await buscarCriativo(req.params.id);
     if (!c) return res.status(404).json({ erro: 'criativo não encontrado' });
-    const imagens = (c.imagens || []).map((i) => ({ ...i, aprovada: String(i.arquivo_id) === String(req.params.arquivoId) }));
-    const aprovada = imagens.find((i) => i.aprovada);
-    if (!aprovada) return res.status(404).json({ erro: 'imagem não encontrada neste criativo' });
-    await atualizar(c.id, { imagens, estado: 'copy_gerando', erro: null });
-    await gerarCopy(c.id, req.body?.feedback);
+    const alvo = (c.imagens || []).find((i) => String(i.arquivo_id) === String(req.params.arquivoId));
+    if (!alvo) return res.status(404).json({ erro: 'imagem não encontrada neste criativo' });
+    const imagens = (c.imagens || []).map((i) => (i.versao_id === alvo.versao_id ? { ...i, escolhida: String(i.arquivo_id) === String(req.params.arquivoId) } : i));
+    await atualizar(c.id, { imagens });
     res.json(apresentar(await buscarCriativo(c.id), urlPublica(req)));
-  } catch (e) { console.error(e); res.status(502).json({ erro: e.message }); }
+  } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
-async function gerarCopy(id, feedback) {
-  const url = process.env.N8N_WEBHOOK_CRIATIVO_COPY;
-  const c = await buscarCriativo(id);
-  const cliente = await clienteDe(c.cliente_id);
-  if (!url) { await atualizar(id, { estado: 'erro', erro: 'N8N_WEBHOOK_CRIATIVO_COPY não configurado' }); return; }
-  try {
-    const aprovada = (c.imagens || []).find((i) => i.aprovada);
-    const { fotos: _f, ...contexto } = c.contexto || {};
-    const resp = await axios.post(url, {
-      criativo_id: c.id, cliente_id: cliente.id, cliente_nome: cliente.nome, perfil: cliente.perfil || '', orientacoes: cliente.orientacoes || '',
-      contexto, racional_imagem: aprovada?.racional || '', feedback: texto(feedback, 600),
-    }, { timeout: 170000, headers: { 'Content-Type': 'application/json' } });
-    const d = resp.data || {};
-    if (d.erro || !Array.isArray(d.variacoes) || !d.variacoes.length) throw new Error(d.erro || 'o n8n não devolveu variações de copy');
-    await atualizar(id, { copy: { variacoes: d.variacoes, legenda: d.legenda || '', escolhida: c.copy?.escolhida || null }, estado: 'copy_pendente', erro: null });
-  } catch (e) {
-    await atualizar(id, { estado: 'erro', erro: `copy: ${e.message}` });
-    throw e;
-  }
-}
-
-// Pedir novas variações de copy (com feedback opcional).
-router.post('/criativos/:id/copy/refazer', async (req, res) => {
+// Montar as artes: uma peça por copy aprovada x formato pedido, no layout escolhido.
+router.post('/criativos/:id/artes', async (req, res) => {
   try {
     const c = await buscarCriativo(req.params.id);
     if (!c) return res.status(404).json({ erro: 'criativo não encontrado' });
-    if (!(c.imagens || []).some((i) => i.aprovada)) return res.status(409).json({ erro: 'aprove uma imagem antes' });
-    await atualizar(c.id, { estado: 'copy_gerando' });
-    await gerarCopy(c.id, req.body?.feedback);
-    res.json(apresentar(await buscarCriativo(c.id), urlPublica(req)));
-  } catch (e) { res.status(502).json({ erro: e.message }); }
-});
+    const layout = LAYOUTS[req.body?.layout] ? req.body.layout : 'sobreposto';
+    const aprovadas = (c.copy?.versoes || []).filter((v) => v.aprovada);
+    if (!aprovadas.length) return res.status(409).json({ erro: 'aprove ao menos uma copy antes' });
 
-// Escolher/editar a copy e montar as artes.
-router.post('/criativos/:id/arte', async (req, res) => {
-  try {
-    const c = await buscarCriativo(req.params.id);
-    if (!c) return res.status(404).json({ erro: 'criativo não encontrado' });
-    const aprovada = (c.imagens || []).find((i) => i.aprovada);
-    if (!aprovada) return res.status(409).json({ erro: 'aprove uma imagem antes' });
-    const b = req.body || {};
-    const escolhida = { headline: texto(b.headline, 80), texto: texto(b.texto, 200), cta: texto(b.cta, 30) };
-    if (!escolhida.headline) return res.status(400).json({ erro: 'informe a headline' });
+    // cada versão aprovada precisa de uma imagem escolhida (com uma só opção, vale a única)
+    const pares = [];
+    for (const v of aprovadas) {
+      const dela = (c.imagens || []).filter((i) => i.versao_id === v.id);
+      const img = dela.find((i) => i.escolhida) || (dela.length === 1 ? dela[0] : null);
+      if (!img) return res.status(409).json({ erro: `escolha a imagem da versão "${v.angulo}"` });
+      pares.push({ versao: v, imagem: img });
+    }
     const cliente = await clienteDe(c.cliente_id);
     const pedido = c.contexto?.formato || 'ambos';
     const formatos = pedido === 'ambos' ? ['feed', 'stories'] : [pedido];
-    await atualizar(c.id, { estado: 'arte_gerando', copy: { ...(c.copy || {}), escolhida }, erro: null });
+    await atualizar(c.id, { estado: 'arte_gerando', erro: null });
 
-    const { rows } = await pool.query('SELECT mime, dados FROM arquivos WHERE id = $1', [aprovada.arquivo_id]);
-    if (!rows.length) throw new Error('imagem aprovada não está mais no banco');
-    const artes = await montarArtes({ formatos, imagem: rows[0].dados, mime: rows[0].mime, ...escolhida, marca: cliente.nome });
+    const pecas = [];
+    for (const { versao, imagem } of pares) {
+      const { rows } = await pool.query('SELECT mime, dados FROM arquivos WHERE id = $1', [imagem.arquivo_id]);
+      if (!rows.length) throw new Error(`a imagem da versão "${versao.angulo}" não está mais no banco`);
+      for (const formato of formatos) {
+        pecas.push({
+          chave: versao.id, formato, layout, imagem: rows[0].dados, mime: rows[0].mime,
+          headline: versao.headline, texto: versao.texto, cta: versao.cta,
+        });
+      }
+    }
+    const feitas = await montarLote(pecas, { marca: cliente.nome });
     const registros = [];
-    for (const a of artes) {
-      const arq = await salvarArquivo(c.id, 'arte', `${cliente.nome} - ${c.titulo} - ${a.formato}.png`.replace(/[\\/:*?"<>|]/g, '-'), 'image/png', a.png);
-      registros.push({ formato: a.formato, arquivo_id: arq.id, token: arq.token, largura: FORMATOS[a.formato].largura, altura: FORMATOS[a.formato].altura, criado_em: new Date().toISOString() });
+    for (const a of feitas) {
+      const versao = aprovadas.find((v) => v.id === a.chave);
+      const nome = `${cliente.nome} - ${c.titulo} - ${versao?.angulo || a.chave} - ${a.formato}.png`.replace(/[\\/:*?"<>|]/g, '-');
+      const arq = await salvarArquivo(c.id, 'arte', nome, 'image/png', a.png);
+      registros.push({
+        versao_id: a.chave, angulo: versao?.angulo || '', formato: a.formato, layout: a.layout,
+        arquivo_id: arq.id, token: arq.token, largura: FORMATOS[a.formato].largura, altura: FORMATOS[a.formato].altura,
+        criado_em: new Date().toISOString(),
+      });
     }
     await atualizar(c.id, { artes: registros, estado: 'pronto' });
     res.json(apresentar(await buscarCriativo(c.id), urlPublica(req)));

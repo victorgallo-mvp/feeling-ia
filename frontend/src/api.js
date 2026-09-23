@@ -59,7 +59,7 @@ export const lerComercial = (id, periodo = 'semana') => req(`/api/clientes/${id}
 export const classificarComercial = (id) => req(`/api/clientes/${id}/comercial/classificar`, { method: 'POST' });
 export const gerarAuditoria = (id, periodo) => req(`/api/clientes/${id}/comercial/auditoria`, comJson('POST', { periodo }));
 
-// Criativos (contexto -> imagens -> aprovação -> copy -> arte)
+// Criativos (contexto -> copy em 3 ângulos -> aprovar as que quiser -> imagens por copy -> artes)
 export const listarCriativos = (clienteId) => req(`/api/clientes/${clienteId}/criativos`);
 export function criarCriativo(clienteId, campos, fotos = []) {
   const form = new FormData();
@@ -67,10 +67,12 @@ export function criarCriativo(clienteId, campos, fotos = []) {
   for (const f of fotos) form.append('fotos', f);
   return req(`/api/clientes/${clienteId}/criativos`, { method: 'POST', body: form });
 }
-export const refazerImagens = (id, feedback) => req(`/api/criativos/${id}/imagens/refazer`, comJson('POST', { feedback }));
-export const aprovarImagem = (id, arquivoId) => req(`/api/criativos/${id}/imagens/${arquivoId}/aprovar`, comJson('POST', {}));
 export const refazerCopy = (id, feedback) => req(`/api/criativos/${id}/copy/refazer`, comJson('POST', { feedback }));
-export const montarArte = (id, copy) => req(`/api/criativos/${id}/arte`, comJson('POST', copy));
+export const editarCopy = (id, versaoId, campos) => req(`/api/criativos/${id}/copy/${versaoId}`, comJson('PUT', campos));
+export const aprovarCopies = (id, versoes) => req(`/api/criativos/${id}/copy/aprovar`, comJson('POST', { versoes }));
+export const refazerImagens = (id, versaoId, feedback) => req(`/api/criativos/${id}/imagens/refazer`, comJson('POST', { versao_id: versaoId, feedback }));
+export const escolherImagem = (id, arquivoId) => req(`/api/criativos/${id}/imagens/${arquivoId}/escolher`, comJson('POST', {}));
+export const montarArtes = (id, layout) => req(`/api/criativos/${id}/artes`, comJson('POST', { layout }));
 export const excluirCriativo = (id) => req(`/api/criativos/${id}`, { method: 'DELETE' });
 
 // Prospecção (diagnóstico de presença digital)

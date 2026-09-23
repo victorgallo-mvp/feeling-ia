@@ -109,7 +109,17 @@ Documento de uso interno (não vai ao cliente), gerado como os outros (`POST /ap
 
 ## Criativos
 
-Seção "Criativos" na página do cliente. Fluxo com aprovação humana entre etapas: contexto (objetivo, produto, oferta, público, formato, direção visual, fotos do produto) → `POST /api/clientes/:id/criativos` grava o criativo e dispara `N8N_WEBHOOK_CRIATIVO_IMAGEM` (workflow "Criativo — Gerar Imagem": descreve as fotos por URL, Claude monta o prompt, gpt-image gera 2 opções, callback `POST /api/criativos/:id/imagens/concluir` com token) → a pessoa aprova uma imagem (`POST .../imagens/:arquivoId/aprovar`) ou pede outras com comentário (`.../imagens/refazer`) → copy síncrona via `N8N_WEBHOOK_CRIATIVO_COPY` (3 variações + legenda; `.../copy/refazer`) → a pessoa escolhe/edita e `POST .../arte` monta feed 1080×1080 e/ou stories 1080×1920 em template HTML (Chromium) → PNGs para download em `GET /api/arquivos/:id/:token?download=1`. Fotos, imagens e artes ficam na tabela `arquivos` (Postgres) porque o volume do Railway não persiste.
+Seção "Criativos" na página do cliente. **A copy vem primeiro**, escrita a partir do material da conta, e cada copy aprovada vira um criativo próprio — a variação nasce do ângulo da copy, não de sortear imagens.
+
+Fluxo, com aprovação humana entre as etapas:
+
+1. **Contexto** (objetivo, produto, oferta, público, formato, direção visual, até 3 fotos do produto) → `POST /api/clientes/:id/criativos`.
+2. **Copy** (`N8N_WEBHOOK_CRIATIVO_COPY`, assíncrono com callback `POST .../copy/concluir`): o cockpit junta o documento mais recente de cada tipo em `documentos_gerados` — briefing (6 mil caracteres), análise de presença (6 mil), reunião (6 mil) e pesquisa de mercado (9 mil) — e o n8n soma a isso os anexos do cliente no cérebro por busca semântica (`tipo` ≠ `relatorio_semanal`: número de campanha não é argumento de anúncio). Devolve 3 versões, cada uma com ângulo, headline, texto de apoio, CTA, legenda, racional e a **direção de imagem** que a arte precisa. As fontes usadas voltam em `copy.fontes` e aparecem na tela.
+3. **Edição e aprovação em lote**: `PUT .../copy/:versaoId` edita o texto à mão; `POST .../copy/aprovar` recebe a lista de versões. Dá para voltar depois e acrescentar um ângulo — quem já tem imagem não gera de novo.
+4. **Imagens** (`N8N_WEBHOOK_CRIATIVO_IMAGEM`, uma chamada por copy aprovada, cada uma com seu `versao_id`): a direção de imagem da copy é a instrução principal do prompt; gpt-image devolve 2 opções por copy no callback `POST .../imagens/concluir`. `POST .../imagens/refazer` refaz só uma versão, com comentário; `POST .../imagens/:arquivoId/escolher` fixa a imagem daquela copy.
+5. **Artes** (`POST .../artes`): monta uma peça por copy aprovada × formato pedido, num dos três layouts — `sobreposto` (texto sobre a foto com véu), `faixa` (foto em cima, faixa colorida com o texto embaixo) e `cartao` (cartão claro sobre a foto). Feed 1080×1080 e stories 1080×1920 em template HTML (Chromium, um único navegador para o lote). PNGs em `GET /api/arquivos/:id/:token?download=1`.
+
+O texto nunca é gerado dentro da imagem: o prompt proíbe letras, logo e selo, e pede o terço inferior limpo porque é onde o template encaixa headline e botão. Fotos, imagens e artes ficam na tabela `arquivos` (Postgres) porque o volume do Railway não persiste.
 
 ## Prospecção (diagnóstico de presença digital)
 

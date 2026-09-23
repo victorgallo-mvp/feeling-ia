@@ -46,9 +46,17 @@ router.post('/clientes/:id/anexar', (req, res) => {
       const tipo = TIPOS_ANEXO.includes(req.body?.tipo) ? req.body.tipo : 'anexo';
       const titulo = (typeof req.body?.titulo === 'string' && req.body.titulo.trim()) ? req.body.titulo.trim().slice(0, 200) : nome;
 
+      // Reenviar o mesmo documento (mesmo título) substitui o que já estava no cérebro em vez de duplicar:
+      // chunk repetido come o orçamento de contexto dos fluxos que leem a base.
+      const antigos = await pool.query(
+        "DELETE FROM cerebro WHERE metadata->>'cliente_id' = $1 AND metadata->>'titulo' = $2",
+        [String(cliente.id), titulo]
+      );
+
       await anexarViaN8n(req.file.buffer, nome, {
         conta_id: cliente.conta_id, cliente_nome: cliente.nome, cliente_id: cliente.id, titulo, tipo,
       });
+      if (antigos.rowCount) console.log(`[anexar] "${titulo}" reindexado: ${antigos.rowCount} trechos antigos removidos`);
 
       // Opcional (padrão ligado): o mesmo agente das reuniões lê o documento e sugere cadastro.
       let sugestoes = null, aviso = null;
