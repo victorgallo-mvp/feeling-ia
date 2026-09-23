@@ -35,7 +35,7 @@ export function ListaProspects() {
         <form className="form" onSubmit={criar}>
           <div className="form-grade">
             <div className="form-campo"><label htmlFor="pr-nome">Nome do negócio</label><input {...campo('nome')} required placeholder="ex.: Pastelaria Universal" /></div>
-            <div className="form-campo"><label htmlFor="pr-cidade">Cidade</label><input {...campo('cidade')} placeholder="ex.: Divinópolis - MG" /></div>
+            <div className="form-campo"><label htmlFor="pr-cidade">Cidade</label><input {...campo('cidade')} required placeholder="ex.: Divinópolis - MG" /></div>
             <div className="form-campo"><label htmlFor="pr-setor">Setor</label><input {...campo('setor')} placeholder="ex.: pastelaria / clínica odontológica" /></div>
             <div className="form-campo"><label htmlFor="pr-instagram">Instagram <span className="form-opcional">(se souber)</span></label><input {...campo('instagram')} placeholder="@perfil" /></div>
             <div className="form-campo"><label htmlFor="pr-site">Site <span className="form-opcional">(se souber)</span></label><input {...campo('site')} placeholder="www.negocio.com.br" /></div>
@@ -68,47 +68,87 @@ export function ListaProspects() {
   );
 }
 
+// Etiqueta do candidato: o que sustenta a escolha, não um número — parecença de nome não é evidência.
+function Selo({ x }) {
+  if (x.informado) return <span className="etiqueta etiqueta-ok">informado por você</span>;
+  if (x.confianca_texto === 'alta') return <span className="etiqueta etiqueta-ok">evidência forte</span>;
+  if (x.confianca_texto === 'media') return <span className="etiqueta">provável</span>;
+  return <span className="etiqueta">sem evidência</span>;
+}
+
 function Candidatos({ p, aoConfirmar, ocupado }) {
   const c = p.candidatos || { gmn: [], instagram: [], sites: [] };
-  const [gmn, setGmn] = useState(p.gmn && !p.gmn.inexistente ? JSON.stringify(p.gmn) : (p.gmn?.inexistente ? 'nenhum' : (c.gmn[0] ? JSON.stringify(c.gmn[0]) : '')));
-  const [ig, setIg] = useState(p.instagram || c.instagram[0]?.username || '');
+  const escolhido = (lista) => (lista || []).find((x) => x.escolhido || x.informado) || null;
+  const [gmn, setGmn] = useState(p.gmn && !p.gmn.inexistente ? JSON.stringify(p.gmn) : (p.gmn?.inexistente ? 'nenhum' : (escolhido(c.gmn) ? JSON.stringify(escolhido(c.gmn)) : '')));
+  const [ig, setIg] = useState(p.instagram || escolhido(c.instagram)?.username || '');
   const [igOutro, setIgOutro] = useState('');
-  const [site, setSite] = useState(p.site || c.sites[0]?.url || '');
+  const [site, setSite] = useState(p.site || escolhido(c.sites)?.url || '');
   const [siteOutro, setSiteOutro] = useState('');
-  const pct = (x) => (x.informado ? 'informado por você' : `${Math.round((x.confianca || 0) * 100)}%`);
-  const tudoPreenchido = !!(gmn && ig && site);
+  const [verTudo, setVerTudo] = useState(false);
   const igFinal = ig === 'outro' ? igOutro.replace(/^@/, '').trim() : ig === 'nenhum' ? '' : ig;
   const siteFinal = site === 'outro' ? siteOutro.trim() : site === 'nenhum' ? '' : site;
+  // sem evidência fica escondido atrás de "ver todos": era o que fazia a pessoa escolher no escuro
+  const filtrar = (lista) => (verTudo ? lista : (lista || []).filter((x) => x.escolhido || x.informado || x.confianca_texto !== 'baixa'));
+  const gmnVis = filtrar(c.gmn), igVis = filtrar(c.instagram), sitesVis = filtrar(c.sites);
+  const ocultos = (c.gmn.length - gmnVis.length) + (c.instagram.length - igVis.length) + (c.sites.length - sitesVis.length);
+
   return (
     <div className="form">
-      <h3>{tudoPreenchido ? 'Confirme (já vem pré-selecionado)' : 'Confirme o que foi encontrado'}</h3>
-      <p className="form-ajuda">Candidatos da busca por nome + cidade, com a confiança de cada um. Se nenhum for o negócio certo, escolha "não tem" — a ausência entra no diagnóstico. Nome ou cidade errados? Edite os dados e localize de novo.</p>
+      <div className="bloco-topo">
+        <h3>Confirme o que foi encontrado</h3>
+        {ocultos > 0 && <button type="button" className="link" onClick={() => setVerTudo((v) => !v)}>{verTudo ? 'esconder os sem evidência' : `ver todos (${ocultos} sem evidência)`}</button>}
+      </div>
+      <p className="form-ajuda">A ficha vem do Google; o Instagram e o site vêm do que está linkado no site oficial ou de perfis conferidos direto na fonte. Cada opção mostra <strong>por que</strong> é candidata. Se nenhuma for o negócio, escolha "não tem" — a ausência entra no diagnóstico.</p>
+      {(c.avisos || []).length > 0 && (
+        <ul className="lista-simples">{c.avisos.map((a, i) => <li key={i} className="doc-data">{a}</li>)}</ul>
+      )}
+
       <div className="form-grade">
         <div className="form-campo form-campo-largo">
           <label>Ficha no Google Meu Negócio</label>
-          {c.gmn.length === 0 && <p className="doc-data">Nenhuma ficha encontrada para "{p.nome}" em "{p.cidade || 'cidade não informada'}".</p>}
-          {c.gmn.map((g, i) => (
-            <label key={i} className="opcao"><input type="radio" name="gmn" checked={gmn === JSON.stringify(g)} onChange={() => setGmn(JSON.stringify(g))} disabled={ocupado} /> <strong>{g.nome}</strong> · {g.endereco || g.categoria || ''} <span className="doc-data">({pct(g)})</span></label>
+          {gmnVis.length === 0 && <p className="doc-data">Nenhuma ficha bateu nome e cidade para "{p.nome}" em "{p.cidade}".</p>}
+          {gmnVis.map((g, i) => (
+            <label key={i} className="opcao">
+              <input type="radio" name="gmn" checked={gmn === JSON.stringify(g)} onChange={() => setGmn(JSON.stringify(g))} disabled={ocupado} />
+              <span><strong>{g.nome}</strong> <Selo x={g} />{g.endereco ? <> · {g.endereco}</> : ''}
+                {g.nota != null && <> · nota {g.nota} ({g.avaliacoes} avaliações)</>}
+                <span className="doc-data motivo">{g.motivo}</span></span>
+            </label>
           ))}
-          <label className="opcao"><input type="radio" name="gmn" checked={gmn === 'nenhum'} onChange={() => setGmn('nenhum')} disabled={ocupado} /> Não tem ficha no Google</label>
+          <label className="opcao"><input type="radio" name="gmn" checked={gmn === 'nenhum'} onChange={() => setGmn('nenhum')} disabled={ocupado} /> <span>Não tem ficha no Google</span></label>
         </div>
         <div className="form-campo">
           <label>Instagram</label>
-          {c.instagram.map((x, i) => (
-            <label key={i} className="opcao"><input type="radio" name="ig" checked={ig === x.username} onChange={() => setIg(x.username)} disabled={ocupado} /> @{x.username} <span className="doc-data">({pct(x)})</span></label>
+          {igVis.map((x, i) => (
+            <label key={i} className="opcao">
+              <input type="radio" name="ig" checked={ig === x.username} onChange={() => setIg(x.username)} disabled={ocupado} />
+              <span>@{x.username} <Selo x={x} />{x.seguidores != null && <> · {x.seguidores} seguidores</>}
+                <span className="doc-data motivo">{x.motivo}</span></span>
+            </label>
           ))}
-          <label className="opcao"><input type="radio" name="ig" checked={ig === 'outro'} onChange={() => setIg('outro')} disabled={ocupado} /> Outro: <input value={igOutro} onChange={(e) => { setIgOutro(e.target.value); setIg('outro'); }} placeholder="@perfil" disabled={ocupado} /></label>
-          <label className="opcao"><input type="radio" name="ig" checked={ig === 'nenhum'} onChange={() => setIg('nenhum')} disabled={ocupado} /> Não tem Instagram</label>
+          <label className="opcao"><input type="radio" name="ig" checked={ig === 'outro'} onChange={() => setIg('outro')} disabled={ocupado} /> <span>Outro: <input value={igOutro} onChange={(e) => { setIgOutro(e.target.value); setIg('outro'); }} placeholder="@perfil" disabled={ocupado} /></span></label>
+          <label className="opcao"><input type="radio" name="ig" checked={ig === 'nenhum'} onChange={() => setIg('nenhum')} disabled={ocupado} /> <span>Não tem Instagram</span></label>
         </div>
         <div className="form-campo">
           <label>Site</label>
-          {c.sites.map((x, i) => (
-            <label key={i} className="opcao"><input type="radio" name="site" checked={site === x.url} onChange={() => setSite(x.url)} disabled={ocupado} /> {x.url.replace(/^https?:\/\//, '')} <span className="doc-data">({pct(x)})</span></label>
+          {sitesVis.map((x, i) => (
+            <label key={i} className="opcao">
+              <input type="radio" name="site" checked={site === x.url} onChange={() => setSite(x.url)} disabled={ocupado} />
+              <span>{x.url.replace(/^https?:\/\//, '')} <Selo x={x} />
+                <span className="doc-data motivo">{x.motivo}</span></span>
+            </label>
           ))}
-          <label className="opcao"><input type="radio" name="site" checked={site === 'outro'} onChange={() => setSite('outro')} disabled={ocupado} /> Outro: <input value={siteOutro} onChange={(e) => { setSiteOutro(e.target.value); setSite('outro'); }} placeholder="www…" disabled={ocupado} /></label>
-          <label className="opcao"><input type="radio" name="site" checked={site === 'nenhum'} onChange={() => setSite('nenhum')} disabled={ocupado} /> Não tem site</label>
+          <label className="opcao"><input type="radio" name="site" checked={site === 'outro'} onChange={() => setSite('outro')} disabled={ocupado} /> <span>Outro: <input value={siteOutro} onChange={(e) => { setSiteOutro(e.target.value); setSite('outro'); }} placeholder="www…" disabled={ocupado} /></span></label>
+          <label className="opcao"><input type="radio" name="site" checked={site === 'nenhum'} onChange={() => setSite('nenhum')} disabled={ocupado} /> <span>Não tem site</span></label>
         </div>
       </div>
+
+      {(c.descartados || []).length > 0 && (
+        <details className="copy-legenda">
+          <summary>o que foi descartado e por quê ({c.descartados.length})</summary>
+          <ul className="lista-simples">{c.descartados.map((x, i) => <li key={i}>{x.o_que}: {x.por_que}</li>)}</ul>
+        </details>
+      )}
       <div className="acoes">
         <button type="button" className="botao" disabled={ocupado || !gmn || !ig || !site} onClick={() => aoConfirmar({
           gmn: gmn === 'nenhum' ? null : JSON.parse(gmn), sem_gmn: gmn === 'nenhum',
@@ -237,13 +277,14 @@ export function Prospect() {
           </dl>
         )}
         <div className="acoes">
-          <button type="button" className="botao" disabled={ocupado || !ligado || p.estado === 'localizando' || p.estado === 'coletando'} onClick={() => agir(() => localizarProspect(p.id))}>
+          <button type="button" className="botao" disabled={ocupado || !ligado || !p.cidade || p.estado === 'localizando' || p.estado === 'coletando'} onClick={() => agir(() => localizarProspect(p.id))}>
             {p.estado === 'localizando' || (ocupado && p.estado === 'novo') ? <><span className="girando" aria-hidden="true" /> Localizando…</> : (p.candidatos ? 'Localizar de novo' : 'Localizar no Google, Instagram e web')}
           </button>
           {p.gmn && p.estado !== 'coletando' && (
             <button type="button" className="botao botao-secundario" disabled={ocupado || !ligado} onClick={() => agir(() => coletarProspect(p.id))}>{d ? 'Coletar de novo' : 'Coletar dados'}</button>
           )}
         </div>
+        {!p.cidade && <p className="aviso">Informe a cidade em "editar" antes de localizar: sem ela a busca traz empresas de mesmo nome em outros estados.</p>}
         {p.estado === 'coletando' && <p className="aviso" role="status"><span className="girando girando-mini" aria-hidden="true" /> Coletando ficha do Google, Instagram e site — 1 a 3 minutos.</p>}
       </section>
 

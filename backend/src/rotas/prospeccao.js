@@ -98,28 +98,27 @@ router.post('/prospects/:id/localizar', async (req, res) => {
   try {
     const p = await buscar(req.params.id);
     if (!p) return res.status(404).json({ erro: 'prospect não encontrado' });
+    // Sem cidade a busca traz empresa de mesmo nome de outro estado e não há como separar — era a causa dos candidatos errados.
+    if (!texto(p.cidade, 120)) return res.status(400).json({ erro: 'informe a cidade antes de localizar: sem ela a busca traz empresas de mesmo nome em outros estados' });
     await atualizar(p.id, { estado: 'localizando', erro: null });
     const resp = await axios.post(url, { prospect_id: p.id, nome: p.nome, cidade: p.cidade, setor: p.setor, site: p.site, instagram: p.instagram },
       { timeout: 170000, headers: { 'Content-Type': 'application/json' } });
     const d = resp.data || {};
     if (d.erro) throw new Error(d.erro);
-    const candidatos = { gmn: d.gmn || [], instagram: d.instagram || [], sites: d.sites || [] };
-    // O que a pessoa já informou no cadastro vira a primeira opção, com confiança total — não faz sentido pedir para escolher de novo.
-    const limpar = (v) => String(v || '').toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, '');
-    const comInformado = (lista, campo, valor, extra) => {
-      if (!valor) return lista;
-      const achado = lista.find((x) => limpar(x[campo]) === limpar(valor));
-      if (achado) { achado.confianca = 1; achado.informado = true; return [achado, ...lista.filter((x) => x !== achado)]; }
-      return [{ [campo]: valor, confianca: 1, informado: true, ...extra }, ...lista];
+    const candidatos = {
+      gmn: d.gmn || [], instagram: d.instagram || [], sites: d.sites || [],
+      avisos: d.avisos || [], descartados: d.descartados || [], decisao: d.decisao || {},
     };
-    candidatos.instagram = comInformado(candidatos.instagram, 'username', p.instagram, { url: `https://www.instagram.com/${p.instagram}/` });
-    candidatos.sites = comInformado(candidatos.sites, 'url', p.site, {});
-    // Confirmação automática quando o primeiro candidato é claro (≥ 0,8, ou ≥ 0,6 com folga sobre o segundo); a pessoa revisa na tela.
-    const claro = (lista) => lista.length && (lista[0].confianca >= 0.8 || (lista[0].confianca >= 0.6 && (lista.length === 1 || lista[0].confianca - lista[1].confianca >= 0.25)));
+    // Confirma sozinho só com evidência dura ("alta": veio do site oficial, telefone confere, bio cita a cidade, ou foi informado).
+    // Parecença de nome não confirma nada — @satransportes_ e @s.a_transportes__ empatam em qualquer métrica de texto.
+    const comEvidencia = (lista) => lista.find((x) => (x.escolhido || x.informado) && x.confianca_texto === 'alta') || null;
     const patch = { candidatos, estado: 'localizado' };
-    if (!p.gmn && claro(candidatos.gmn)) patch.gmn = candidatos.gmn[0];
-    if (!p.instagram && claro(candidatos.instagram)) patch.instagram = candidatos.instagram[0].username;
-    if (!p.site && claro(candidatos.sites)) patch.site = candidatos.sites[0].url;
+    const ficha = comEvidencia(candidatos.gmn);
+    const insta = comEvidencia(candidatos.instagram);
+    const site = comEvidencia(candidatos.sites);
+    if (!p.gmn && ficha) patch.gmn = ficha;
+    if (!p.instagram && insta) patch.instagram = insta.username;
+    if (!p.site && site) patch.site = site.url;
     await atualizar(p.id, patch);
     res.json(publico(await buscar(p.id)));
   } catch (e) {
