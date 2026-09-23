@@ -55,6 +55,7 @@ export function ListaProspects() {
                   <span className="doc-data">{[p.setor, p.cidade].filter(Boolean).join(' · ') || '—'} · {fmtData(p.atualizado_em)}</span>
                 </div>
                 <div className="doc-acoes">
+                  {p.diagnostico?.potencial?.nivel && <span className="etiqueta" title="potencial de oportunidade">potencial {p.diagnostico.potencial.nivel}</span>}
                   {p.diagnostico?.notas?.geral != null && <span className={`etiqueta ${corNota(p.diagnostico.notas.geral)}`}>nota {p.diagnostico.notas.geral}</span>}
                   {p.cliente_id ? <Link className="link" to={`/clientes/${p.cliente_id}`}>virou cliente</Link> : <span className={`etiqueta${p.estado === 'erro' ? ' etiqueta-erro' : ''}`}>{ESTADO[p.estado] || p.estado}</span>}
                 </div>
@@ -118,24 +119,63 @@ function Candidatos({ p, aoConfirmar, ocupado }) {
   );
 }
 
-function Frente({ titulo, nota, dados }) {
+// Pilares do diagnóstico com os pesos do padrão da casa.
+const PILARES = [
+  ['google', 'Google e SEO local', 20],
+  ['instagram', 'Instagram', 20],
+  ['reputacao', 'Reputação', 15],
+  ['conteudo', 'Conteúdo', 15],
+  ['site', 'Site', 15],
+  ['conversao', 'Conversão e jornada', 10],
+  ['concorrencia', 'Concorrência', 5],
+];
+const ETAPAS = { descoberta: 'Descoberta', interesse: 'Interesse', confianca: 'Confiança', consideracao: 'Consideração', conversao: 'Conversão', atendimento: 'Atendimento' };
+const OCULTOS = ['achados', 'completude', 'existe', 'bruto', 'motivo', 'buscas', 'url'];
+const valor = (v) => (typeof v === 'boolean' ? (v ? 'sim' : 'não') : String(v));
+
+// Sub-bloco para objetos rasos (distribuição de notas, formatos, Core Web Vitals, estrutura do site…).
+function Miudos({ titulo, obj }) {
+  const itens = Object.entries(obj || {}).filter(([, v]) => v != null && v !== '' && typeof v !== 'object');
+  if (!itens.length) return null;
+  return <p className="doc-data"><strong>{titulo}:</strong> {itens.map(([k, v]) => `${k.replace(/_/g, ' ')} ${valor(v)}`).join(' · ')}</p>;
+}
+
+function Frente({ titulo, pilar, peso, nota, dados, achados, children }) {
   if (!dados) return null;
-  const fatos = Object.entries(dados).filter(([k, v]) => !['achados', 'concorrentes', 'completude', 'existe', 'bruto', 'posts'].includes(k) && v != null && typeof v !== 'object');
+  const fatos = Object.entries(dados).filter(([k, v]) => !OCULTOS.includes(k) && v != null && v !== '' && typeof v !== 'object');
+  const meus = (achados || []).filter((a) => a.pilar === pilar);
   return (
     <div className="frente">
-      <div className="bloco-topo"><h3>{titulo}</h3>{nota != null && <span className={`etiqueta ${corNota(nota)}`}>nota {nota}</span>}</div>
+      <div className="bloco-topo">
+        <h3>{titulo} <span className="doc-data">peso {peso}%</span></h3>
+        {nota != null && <span className={`etiqueta ${corNota(nota)}`}>{nota}/100 · {(nota / 20).toFixed(1)} de 5</span>}
+      </div>
       {dados.existe === false ? <p className="aviso aviso-erro">{dados.motivo || 'Não encontrado — o negócio não tem esta presença.'}</p> : (
         <>
-          {fatos.length > 0 && <dl className="fatos">{fatos.map(([k, v]) => <div key={k}><dt>{k.replace(/_/g, ' ')}</dt><dd>{String(v)}</dd></div>)}</dl>}
-          {dados.completude?.itens && <p className="doc-data">Completude: {dados.completude.itens.filter((i) => i.ok).map((i) => i.nome).join(', ') || '—'}{dados.completude.itens.some((i) => !i.ok) ? ` · falta: ${dados.completude.itens.filter((i) => !i.ok).map((i) => i.nome).join(', ')}` : ''}</p>}
-          {dados.concorrentes?.length > 0 && (
-            <div className="tabela-rolagem"><table className="tabela"><thead><tr><th>#</th><th>Concorrente no setor</th><th>Nota</th><th>Avaliações</th></tr></thead>
-              <tbody>{dados.concorrentes.map((x, i) => <tr key={i} className={x.eh_prospect ? 'linha-detalhe' : ''}><td>{x.posicao ?? i + 1}</td><td>{x.nome}</td><td>{x.nota ?? '—'}</td><td>{x.avaliacoes ?? '—'}</td></tr>)}</tbody></table></div>
-          )}
-          {dados.achados?.length > 0 && <ul className="lista-simples">{dados.achados.map((a, i) => <li key={i}>{a}</li>)}</ul>}
+          {fatos.length > 0 && <dl className="fatos">{fatos.map(([k, v]) => <div key={k}><dt>{k.replace(/_/g, ' ')}</dt><dd>{valor(v)}</dd></div>)}</dl>}
+          {dados.completude?.itens && <p className="doc-data"><strong>Completude {dados.completude.pct}%:</strong> tem {dados.completude.itens.filter((i) => i.ok).map((i) => i.nome).join(', ') || '—'}{dados.completude.itens.some((i) => !i.ok) ? ` · falta ${dados.completude.itens.filter((i) => !i.ok).map((i) => i.nome).join(', ')}` : ''}</p>}
+          {children}
         </>
       )}
+      {meus.length > 0 && <ul className="lista-simples">{meus.map((a, i) => <li key={i}>{a.problema} <span className="doc-data">— {a.impacto}</span></li>)}</ul>}
     </div>
+  );
+}
+
+// "Quem aparece quando o cliente procura": o argumento mais forte da reunião.
+function TabelaBuscas({ buscas }) {
+  if (!buscas?.length) return null;
+  return (
+    <div className="tabela-rolagem"><table className="tabela">
+      <thead><tr><th>Busca do cliente</th><th>Posição</th><th>Concorrentes à frente</th></tr></thead>
+      <tbody>{buscas.map((b, i) => (
+        <tr key={i} className={b.posicao == null ? 'linha-detalhe' : ''}>
+          <td>{b.busca}</td>
+          <td>{b.posicao == null ? 'não aparece' : `${b.posicao}º de ${b.analisados}`}</td>
+          <td>{b.concorrentes_a_frente?.length ? b.concorrentes_a_frente.map((c) => `${c.nome} (${c.nota ?? '—'}/${c.avaliacoes ?? '—'})`).join(' · ') : '—'}</td>
+        </tr>
+      ))}</tbody>
+    </table></div>
   );
 }
 
@@ -215,13 +255,62 @@ export function Prospect() {
         <section className="bloco">
           <div className="bloco-topo"><h2>Scorecard</h2><span className="doc-data">coletado {fmtData(d.coletado_em)}</span></div>
           <div className="kpis">
-            {[['geral', 'Geral'], ['gmn', 'Google Meu Negócio'], ['instagram', 'Instagram'], ['site', 'Site']].map(([k, r]) => (
-              <div key={k} className={`kpi ${corNota(d.notas?.[k])}`}><span className="kpi-valor">{d.notas?.[k] ?? '—'}</span><span className="kpi-rotulo">{r}</span></div>
+            <div className={`kpi ${corNota(d.notas?.geral)}`}><span className="kpi-valor">{d.notas?.geral ?? '—'}</span><span className="kpi-rotulo">Geral</span></div>
+            {PILARES.map(([k, r, peso]) => (
+              <div key={k} className={`kpi ${corNota(d.notas?.[k])}`}><span className="kpi-valor">{d.notas?.[k] ?? '—'}</span><span className="kpi-rotulo">{r} <span className="doc-data">{peso}%</span></span></div>
             ))}
           </div>
-          <Frente titulo="Google Meu Negócio" nota={d.notas?.gmn} dados={d.gmn} />
-          <Frente titulo="Instagram" nota={d.notas?.instagram} dados={d.instagram} />
-          <Frente titulo="Site" nota={d.notas?.site} dados={d.site} />
+
+          {d.potencial && (
+            <div className="frente">
+              <div className="bloco-topo"><h3>Potencial de oportunidade</h3><span className={`etiqueta ${d.potencial.nivel === 'alto' ? 'nota-boa' : d.potencial.nivel === 'medio' ? 'nota-media' : 'nota-ruim'}`}>{d.potencial.nivel}</span></div>
+              <p>{d.potencial.leitura}</p>
+              {d.potencial.ativos?.length > 0 && <p className="doc-data"><strong>Já tem:</strong> {d.potencial.ativos.join(' · ')}</p>}
+              {d.potencial.lacunas?.length > 0 && <p className="doc-data"><strong>Falta:</strong> {d.potencial.lacunas.join(' · ')}</p>}
+            </div>
+          )}
+          {d.gargalos?.length > 0 && (
+            <div className="frente"><div className="bloco-topo"><h3>Onde mais dói hoje</h3></div>
+              <ol className="lista-simples">{d.gargalos.map((g, i) => <li key={i}>{g}</li>)}</ol>
+            </div>
+          )}
+
+          <Frente titulo="Google e SEO local" pilar="google" peso={20} nota={d.notas?.google} dados={d.google} achados={d.achados}>
+            <TabelaBuscas buscas={d.google?.buscas} />
+          </Frente>
+          <Frente titulo="Reputação" pilar="reputacao" peso={15} nota={d.notas?.reputacao} dados={d.reputacao} achados={d.achados}>
+            <Miudos titulo="Distribuição das notas" obj={d.reputacao?.distribuicao} />
+            {d.reputacao?.palavras_dos_clientes?.length > 0 && <p className="doc-data"><strong>O que os clientes falam:</strong> {d.reputacao.palavras_dos_clientes.map((t) => `${t.palavra} (${t.mencoes})`).join(' · ')}</p>}
+            {d.reputacao?.amostra_reclamacoes?.length > 0 && <ul className="lista-simples">{d.reputacao.amostra_reclamacoes.map((r, i) => <li key={i}>{r.estrelas}★ {r.texto} <span className="doc-data">({r.respondida ? 'respondida' : 'sem resposta'})</span></li>)}</ul>}
+          </Frente>
+          <Frente titulo="Instagram" pilar="instagram" peso={20} nota={d.notas?.instagram} dados={d.instagram} achados={d.achados} />
+          <Frente titulo="Conteúdo" pilar="conteudo" peso={15} nota={d.notas?.conteudo} dados={d.conteudo} achados={d.achados}>
+            <Miudos titulo="Formatos" obj={d.conteudo?.formatos} />
+            <Miudos titulo="Temas nas legendas (nº de posts)" obj={d.conteudo?.temas_nas_legendas} />
+          </Frente>
+          <Frente titulo="Site" pilar="site" peso={15} nota={d.notas?.site} dados={d.site} achados={d.achados}>
+            <Miudos titulo="Core Web Vitals" obj={d.site?.core_web_vitals} />
+            <Miudos titulo="Páginas encontradas" obj={d.site?.estrutura} />
+            <Miudos titulo="WhatsApp no site" obj={d.site?.whatsapp} />
+          </Frente>
+          <Frente titulo="Conversão e jornada" pilar="conversao" peso={10} nota={d.notas?.conversao} dados={{ existe: true, pontos_de_contato: (d.conversao?.pontos_de_contato || []).join(', ') || 'nenhum', faltando: (d.conversao?.faltando || []).join(', ') || '—' }} achados={d.achados}>
+            {d.conversao?.etapas && (
+              <div className="tabela-rolagem"><table className="tabela">
+                <thead><tr><th>Etapa</th><th>Situação</th><th>O que foi visto</th></tr></thead>
+                <tbody>{Object.entries(d.conversao.etapas).map(([k, e]) => (
+                  <tr key={k} className={e.ok === false ? 'linha-detalhe' : ''}><td>{ETAPAS[k] || k}</td><td>{e.ok === true ? 'ok' : e.ok === false ? 'quebra' : 'não avaliada'}</td><td>{e.detalhe}</td></tr>
+                ))}</tbody>
+              </table></div>
+            )}
+          </Frente>
+          <Frente titulo="Concorrência" pilar="concorrencia" peso={5} nota={d.notas?.concorrencia} dados={d.concorrencia && { existe: true, total_identificados: d.concorrencia.total_identificados, mediana_nota: d.concorrencia.mediana_nota, mediana_avaliacoes: d.concorrencia.mediana_avaliacoes }} achados={d.achados}>
+            {d.concorrencia?.principais?.length > 0 && (
+              <div className="tabela-rolagem"><table className="tabela">
+                <thead><tr><th>Concorrente</th><th>Nota</th><th>Avaliações</th><th>Site</th><th>Apareceu na busca</th></tr></thead>
+                <tbody>{d.concorrencia.principais.map((c, i) => <tr key={i}><td>{c.nome}</td><td>{c.nota ?? '—'}</td><td>{c.avaliacoes ?? '—'}</td><td>{c.site ? 'sim' : 'não'}</td><td>{c.busca}</td></tr>)}</tbody>
+              </table></div>
+            )}
+          </Frente>
           <div className="acoes">
             <button type="button" className="botao" disabled={ocupado || !ligado || (p.documentos || []).some((x) => x.estado === 'gerando')} onClick={() => agir(() => gerarDiagnostico(p.id))}>Gerar diagnóstico (PDF)</button>
           </div>

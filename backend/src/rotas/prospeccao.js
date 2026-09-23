@@ -37,7 +37,11 @@ router.get('/prospects', async (req, res) => {
     await pool.query(`UPDATE prospects SET estado = 'erro', erro = 'o n8n não respondeu em ${TEMPO_MAXIMO_MIN} minutos'
       WHERE estado IN ('coletando') AND atualizado_em < now() - interval '${TEMPO_MAXIMO_MIN} minutes'`);
     const { rows } = await pool.query(`SELECT ${CAMPOS} FROM prospects ORDER BY atualizado_em DESC LIMIT 200`);
-    res.json(rows.map((p) => ({ ...p, diagnostico: p.diagnostico ? { notas: p.diagnostico.notas } : null, candidatos: undefined })));
+    res.json(rows.map((p) => ({
+      ...p,
+      diagnostico: p.diagnostico ? { notas: p.diagnostico.notas, potencial: p.diagnostico.potencial ? { nivel: p.diagnostico.potencial.nivel } : null } : null,
+      candidatos: undefined,
+    })));
   } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
@@ -211,10 +215,14 @@ router.post('/prospects/:id/virar-cliente', async (req, res) => {
     if (!p) return res.status(404).json({ erro: 'prospect não encontrado' });
     if (p.cliente_id) return res.status(409).json({ erro: 'este prospect já virou cliente', cliente_id: p.cliente_id });
     const d = p.diagnostico || {};
+    const rep = d.reputacao || d.gmn || {}; // v2 separa reputação da ficha; v1 guardava tudo em "gmn"
+    const hoje = new Date().toLocaleDateString('pt-BR');
     const linhas = [];
-    if (p.gmn?.categoria) linhas.push(`Categoria no Google: ${p.gmn.categoria}`);
-    if (d.gmn?.nota) linhas.push(`Google Meu Negócio: nota ${d.gmn.nota} em ${d.gmn.avaliacoes || 0} avaliações (diagnóstico de ${new Date().toLocaleDateString('pt-BR')})`);
+    if (p.gmn?.categoria || d.google?.categoria) linhas.push(`Categoria no Google: ${d.google?.categoria || p.gmn.categoria}`);
+    if (rep.nota) linhas.push(`Google Meu Negócio: nota ${rep.nota} em ${rep.avaliacoes || 0} avaliações (diagnóstico de ${hoje})`);
     if (d.instagram?.seguidores) linhas.push(`Instagram: ${d.instagram.seguidores} seguidores`);
+    if (d.notas?.geral != null) linhas.push(`Diagnóstico de presença digital ${hoje}: nota geral ${d.notas.geral}/100${d.potencial?.nivel ? `, potencial ${d.potencial.nivel}` : ''}`);
+    if (d.gargalos?.length) linhas.push(`Gargalos na entrada: ${d.gargalos.slice(0, 3).join('; ')}`);
     const { rows } = await pool.query(
       `INSERT INTO clientes (nome, setor, cidade, site, instagram, perfil) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, nome`,
       [p.nome, p.setor, p.cidade, p.site, p.instagram, linhas.join('\n') || null]
