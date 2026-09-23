@@ -257,9 +257,15 @@ export function Prospect() {
           <div className="kpis">
             <div className={`kpi ${corNota(d.notas?.geral)}`}><span className="kpi-valor">{d.notas?.geral ?? '—'}</span><span className="kpi-rotulo">Geral</span></div>
             {PILARES.map(([k, r, peso]) => (
-              <div key={k} className={`kpi ${corNota(d.notas?.[k])}`}><span className="kpi-valor">{d.notas?.[k] ?? '—'}</span><span className="kpi-rotulo">{r} <span className="doc-data">{peso}%</span></span></div>
+              <div key={k} className={`kpi ${corNota(d.notas?.[k])}`} title={d.notas?.[k] == null ? 'não foi possível medir este pilar' : ''}><span className="kpi-valor">{d.notas?.[k] ?? '—'}</span><span className="kpi-rotulo">{r} <span className="doc-data">{peso}%</span></span></div>
             ))}
           </div>
+          {d.pilares_nao_medidos?.length > 0 && (
+            <p className="form-ajuda">
+              {d.pilares_nao_medidos.map((k) => PILARES.find((p) => p[0] === k)?.[1] || k).join(' e ')} {d.pilares_nao_medidos.length > 1 ? 'não puderam' : 'não pôde'} ser {d.pilares_nao_medidos.length > 1 ? 'medidos' : 'medido'} — {d.pilares_nao_medidos.length > 1 ? 'ficaram' : 'ficou'} fora da nota geral, que foi calculada só com os pilares avaliados.
+            </p>
+          )}
+          {d.avisos?.length > 0 && <ul className="lista-simples">{d.avisos.map((a, i) => <li key={i} className="doc-data">{a}</li>)}</ul>}
 
           {d.potencial && (
             <div className="frente">
