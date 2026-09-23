@@ -86,6 +86,47 @@ function resumir(leads) {
   };
 }
 
+// Auditoria no padrão da casa: % de conversas que cumpriram cada critério (só entre as classificadas).
+// A ordem e os nomes seguem o "Modelo de Auditoria de Atendimento via WhatsApp" da Feeling.
+const CRITERIOS = [
+  { chave: 'cordial', rotulo: 'Atendente cordial e prestativo', grupo: 'Qualidade do atendimento' },
+  { chave: 'clara_objetiva', rotulo: 'Comunicação clara e objetiva', grupo: 'Qualidade do atendimento' },
+  { chave: 'erros_portugues', rotulo: 'Erros de português/digitação', grupo: 'Qualidade do atendimento', ruim: true },
+  { chave: 'roteiro', rotulo: 'Seguiu roteiro de vendas', grupo: 'Script de vendas' },
+  { chave: 'informacoes_completas', rotulo: 'Passou as informações necessárias', grupo: 'Script de vendas' },
+  { chave: 'perguntas_estrategicas', rotulo: 'Fez perguntas para qualificar', grupo: 'Qualificação do lead' },
+  { chave: 'interesse_identificado', rotulo: 'Identificou o interesse real', grupo: 'Qualificação do lead' },
+  { chave: 'duvidas_esclarecidas', rotulo: 'Esclareceu as dúvidas', grupo: 'Resolução de dúvidas' },
+  { chave: 'material_apoio', rotulo: 'Enviou material de apoio', grupo: 'Resolução de dúvidas' },
+  { chave: 'follow_up', rotulo: 'Fez follow-up depois do silêncio', grupo: 'Follow-up' },
+  { chave: 'gatilhos', rotulo: 'Usou escassez/urgência', grupo: 'Gatilhos mentais' },
+  { chave: 'prova_social', rotulo: 'Usou prova social', grupo: 'Gatilhos mentais' },
+  { chave: 'pelo_nome', rotulo: 'Chamou o lead pelo nome', grupo: 'Personalização' },
+  { chave: 'conexao', rotulo: 'Criou conexão com o lead', grupo: 'Personalização' },
+  { chave: 'informacao_confusa', rotulo: 'Informações confusas', grupo: 'Erros e ruídos', ruim: true },
+  { chave: 'preco_errado', rotulo: 'Preço/condição divergente', grupo: 'Erros e ruídos', ruim: true },
+];
+
+function auditar(leads) {
+  const comCrit = leads.filter((l) => l.criterios && Object.keys(l.criterios).length);
+  if (!comCrit.length) return { avaliadas: 0, criterios: [], falhas: [] };
+  const criterios = CRITERIOS.map((c) => {
+    const avaliados = comCrit.filter((l) => typeof l.criterios[c.chave] === 'boolean');
+    const sim = avaliados.filter((l) => l.criterios[c.chave]).length;
+    return { ...c, avaliadas: avaliados.length, sim, pct: avaliados.length ? Math.round((100 * sim) / avaliados.length) : null };
+  });
+  // falhas mais repetidas (texto livre da IA, agrupado por semelhança grosseira)
+  const mapa = new Map();
+  for (const l of comCrit) for (const f of l.falhas || []) {
+    const k = String(f).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z ]/g, '').split(' ').filter((w) => w.length > 4).slice(0, 4).join(' ');
+    if (!k) continue;
+    if (!mapa.has(k)) mapa.set(k, { texto: f, qtd: 0 });
+    mapa.get(k).qtd += 1;
+  }
+  const falhas = [...mapa.values()].sort((a, b) => b.qtd - a.qtd).slice(0, 8);
+  return { avaliadas: comCrit.length, criterios, falhas };
+}
+
 const contar = (leads, chave) => {
   const m = new Map();
   for (const l of leads) { const k = (l[chave] || '').trim(); if (k) m.set(k, (m.get(k) || 0) + 1); }
@@ -141,9 +182,10 @@ router.get('/clientes/:id/comercial', async (req, res) => {
       ativo: true,
       periodo: janela,
       classificacao: { ...cliente.comercial, total_leads_tabela: total_geral },
-      anuncio: { ...resumir(anuncio), interesses: contar(anuncio, 'interesse'), objecoes: contar(anuncio, 'objecao') },
+      anuncio: { ...resumir(anuncio), interesses: contar(anuncio, 'interesse'), objecoes: contar(anuncio, 'objecao'), auditoria: auditar(anuncio) },
       organico: { ...resumir(organico), interesses: contar(organico, 'interesse'), objecoes: contar(organico, 'objecao') },
       todos: resumir(leads),
+      auditoria: auditar(leads),
       por_anuncio,
       alertas,
       leads: leads.map((l) => ({ ...l, contato: mascarar(l.contato), perfil: undefined })),
@@ -192,6 +234,64 @@ function agendarRodadaDiaria() {
     }
   }, 60 * 1000);
 }
+
+// POST /clientes/:id/comercial/auditoria?periodo=... — gera a "Auditoria de Atendimento via WhatsApp" (PDF).
+// Documento tipo 'auditoria'; o n8n escreve no modelo da casa e conclui pelo callback dos documentos.
+router.post('/clientes/:id/comercial/auditoria', async (req, res) => {
+  const url = process.env.N8N_WEBHOOK_COMERCIAL_AUDITORIA;
+  if (!url) return res.status(503).json({ erro: 'N8N_WEBHOOK_COMERCIAL_AUDITORIA não configurado' });
+  const periodo = ['7d', 'semana', '30d', 'mes'].includes(req.body?.periodo) ? req.body.periodo : 'mes';
+  try {
+    const cliente = await buscarCliente(req.params.id);
+    if (!cliente) return res.status(404).json({ erro: 'cliente não encontrado' });
+    if (!cliente.whatsapp_ativo) return res.status(403).json({ erro: 'ligue "WhatsApp com IA" na ficha do cliente' });
+
+    const janela = intervalo(periodo);
+    const { rows: leads } = await pool.query(
+      `SELECT * FROM leads_comercial WHERE cliente_id = $1
+         AND (primeiro_contato AT TIME ZONE 'America/Sao_Paulo') >= $2::date
+         AND (primeiro_contato AT TIME ZONE 'America/Sao_Paulo') <  $3::date
+       ORDER BY primeiro_contato DESC`,
+      [cliente.id, janela.ini, janela.fim]
+    );
+    if (!leads.length) return res.status(409).json({ erro: 'nenhum lead classificado neste período — atualize as conversas antes' });
+
+    const anuncio = leads.filter((l) => l.origem === 'anuncio');
+    const dados = {
+      total_leads: leads.length, de_anuncio: anuncio.length,
+      geral: resumir(leads), anuncio: resumir(anuncio),
+      auditoria: auditar(leads),
+      interesses: contar(leads, 'interesse'), objecoes: contar(leads, 'objecao'),
+      tempo_ia_segundos: 'a IA responde em segundos; os tempos apurados medem a entrada do atendente humano',
+    };
+    // amostras: melhores e piores notas, sem telefone nem nome
+    const ordenadas = leads.filter((l) => l.nota_atendimento != null).sort((a, b) => a.nota_atendimento - b.nota_atendimento);
+    const amostra = (l) => ({
+      origem: l.origem, etapa: l.etapa, interesse: l.interesse, nota: l.nota_atendimento, motivo: l.motivo_nota,
+      primeira_resposta_min: l.primeira_resposta_humana_seg == null ? null : Math.round(l.primeira_resposta_humana_seg / 60),
+      esperando_h: l.aguardando_resposta_h, resumo: l.resumo, falhas: l.falhas || [],
+    });
+    const amostras = [...ordenadas.slice(0, 6), ...ordenadas.slice(-3)].map(amostra);
+
+    const token = crypto.randomBytes(24).toString('hex');
+    const ins = await pool.query(
+      `INSERT INTO documentos_gerados (cliente_id, cliente_nome, tipo, estado, extras)
+       VALUES ($1,$2,'auditoria','gerando',$3) RETURNING id, tipo, criado_em, estado`,
+      [cliente.id, cliente.nome, JSON.stringify({ callback_token: token, periodo: janela })]
+    );
+    const doc = ins.rows[0];
+    axios.post(url, {
+      cliente_id: cliente.id, cliente_nome: cliente.nome, documento_id: doc.id,
+      periodo: janela, dados, amostras,
+      callback_url: `${urlPublica(req)}/api/documentos/${doc.id}/concluir`, callback_token: token,
+    }, { timeout: 30000, headers: { 'Content-Type': 'application/json' } })
+      .catch(async (e) => { await pool.query("UPDATE documentos_gerados SET estado = 'erro', erro = $2 WHERE id = $1", [doc.id, e.message]).catch(() => {}); });
+    res.status(202).json({ ...doc, url_download: `/api/documentos/${doc.id}/download` });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ erro: e.message });
+  }
+});
 
 // POST /clientes/:id/comercial/classificar — dispara o workflow do n8n (assíncrono, callback com token).
 router.post('/clientes/:id/comercial/classificar', async (req, res) => {

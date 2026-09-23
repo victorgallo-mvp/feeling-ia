@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { classificarComercial, lerComercial } from '../api.js';
+import { classificarComercial, gerarAuditoria, lerComercial } from '../api.js';
 
 const ETAPA = {
   novo: 'Novo', em_conversa: 'Em conversa', qualificado: 'Qualificado', simulacao_enviada: 'Simulação enviada',
@@ -66,6 +66,47 @@ function Listas({ r }) {
   );
 }
 
+function Auditoria({ a }) {
+  if (!a || !a.avaliadas) return null;
+  const grupos = [];
+  for (const c of a.criterios) {
+    const g = grupos.find((x) => x.nome === c.grupo);
+    if (g) g.itens.push(c); else grupos.push({ nome: c.grupo, itens: [c] });
+  }
+  const cor = (c) => (c.pct == null ? '' : c.ruim ? (c.pct >= 30 ? 'texto-erro' : '') : c.pct >= 70 ? 'nota-boa' : c.pct >= 40 ? 'nota-media' : 'nota-ruim');
+  return (
+    <>
+      <h4>Auditoria do atendimento (padrão Feeling)</h4>
+      <p className="form-ajuda">Percentual das {a.avaliadas} conversas classificadas que cumpriram cada critério do modelo de auditoria da casa. Itens marcados como problema aparecem em vermelho quando passam de 30%.</p>
+      <div className="tabela-rolagem">
+        <table className="tabela">
+          <thead><tr><th>Critério</th><th>Conversas</th><th>%</th></tr></thead>
+          <tbody>
+            {grupos.map((g) => (
+              <>
+                <tr key={g.nome} className="linha-detalhe"><td colSpan={3}><strong>{g.nome}</strong></td></tr>
+                {g.itens.map((c) => (
+                  <tr key={c.chave}>
+                    <td>{c.rotulo}{c.ruim ? ' (problema)' : ''}</td>
+                    <td>{c.sim} de {c.avaliadas}</td>
+                    <td className={cor(c)}>{c.pct == null ? '—' : `${c.pct}%`}</td>
+                  </tr>
+                ))}
+              </>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {a.falhas.length > 0 && (
+        <>
+          <h4>Falhas mais repetidas</h4>
+          <ul className="lista-simples">{a.falhas.map((f, i) => <li key={i}>{f.texto} <span className="doc-data">({f.qtd}x)</span></li>)}</ul>
+        </>
+      )}
+    </>
+  );
+}
+
 function TabelaLeads({ leads, mostrarAnuncio }) {
   const [aberto, setAberto] = useState(null);
   if (!leads.length) return <p className="vazio">Nenhum lead neste recorte.</p>;
@@ -92,6 +133,7 @@ function TabelaLeads({ leads, mostrarAnuncio }) {
                     {l.proximo_passo && <p><strong>Próximo passo:</strong> {l.proximo_passo}</p>}
                     {l.objecao && <p><strong>Objeção:</strong> {l.objecao}</p>}
                     {l.motivo_nota && <p><strong>Atendimento:</strong> {l.motivo_nota}</p>}
+                    {(l.falhas || []).length > 0 && <p><strong>Falhas:</strong> {l.falhas.join(' · ')}</p>}
                     {l.anuncio && <p className="doc-data">Anúncio: {String(l.anuncio).replace(/\s+/g, ' ').slice(0, 200)}</p>}
                     <p className="doc-data">Mensagens: lead {l.msgs_lead} · IA {l.msgs_ia} · humano {l.msgs_humano} · última {fmtData(l.ultima_msg)} ({l.ultima_msg_de || '—'})</p>
                   </td>
@@ -106,7 +148,7 @@ function TabelaLeads({ leads, mostrarAnuncio }) {
 }
 
 // Seção "Comercial (WhatsApp)": anúncio primeiro (é o que a Feeling entrega), orgânico depois, compacto.
-export default function Comercial({ clienteId }) {
+export default function Comercial({ clienteId, aoNovoDocumento }) {
   const [periodo, setPeriodo] = useState('semana');
   const [dados, setDados] = useState(null);
   const [erro, setErro] = useState('');
@@ -131,6 +173,11 @@ export default function Comercial({ clienteId }) {
     try { await classificarComercial(clienteId); await carregar(); } catch (e) { setErro(e.message); } finally { setPedindo(false); }
   }
 
+  async function auditar() {
+    setPedindo(true); setErro('');
+    try { await gerarAuditoria(clienteId, periodo); aoNovoDocumento?.(); } catch (e) { setErro(e.message); } finally { setPedindo(false); }
+  }
+
   if (dados && dados.ativo === false) return null;
   if (!dados) return <section className="bloco"><h2>Comercial (WhatsApp)</h2>{erro ? <p className="aviso aviso-erro">{erro}</p> : <p className="vazio">Carregando…</p>}</section>;
 
@@ -153,6 +200,7 @@ export default function Comercial({ clienteId }) {
           <button type="button" className="botao botao-secundario" disabled={pedindo || emAndamento} onClick={classificar}>
             {emAndamento ? <><span className="girando girando-mini" aria-hidden="true" /> Classificando…</> : 'Atualizar conversas'}
           </button>
+          <button type="button" className="botao" disabled={pedindo || emAndamento || !dados?.auditoria?.avaliadas} onClick={auditar} title="Gera o PDF no modelo de auditoria da casa">Gerar auditoria (PDF)</button>
         </div>
       </div>
       <p className="doc-data">
@@ -205,6 +253,8 @@ export default function Comercial({ clienteId }) {
         <div className="form-campo"><h4>Funil dos leads de anúncio</h4><Funil funil={a.funil} /></div>
         <div className="form-campo"><Listas r={a} /></div>
       </div>
+
+      <Auditoria a={dados.auditoria} />
 
       <div className="bloco-topo">
         <h4>Leads de anúncio ({leadsAnuncio.length})</h4>

@@ -94,6 +94,9 @@ async function migrar() {
       PRIMARY KEY (cliente_id, contato)
     );
     CREATE INDEX IF NOT EXISTS leads_comercial_cliente_data ON leads_comercial (cliente_id, primeiro_contato);
+    -- auditoria no padrão da casa (10 critérios do "Modelo de Auditoria de Atendimento via WhatsApp")
+    ALTER TABLE leads_comercial ADD COLUMN IF NOT EXISTS criterios JSONB;
+    ALTER TABLE leads_comercial ADD COLUMN IF NOT EXISTS falhas JSONB;
   `);
   // Criativos: contexto -> imagens (n8n) -> aprovação -> copy (n8n) -> escolha -> arte (cockpit, template HTML).
   // Arquivos (fotos, imagens, artes) ficam no Postgres: o volume do Railway não persiste.

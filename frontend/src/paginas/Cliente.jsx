@@ -14,7 +14,7 @@ const TIPOS = [
   { tipo: 'analise', rotulo: 'Análise de Presença Digital', acao: 'Analisar Presença Digital' },
   { tipo: 'interno', rotulo: 'Análise interna da conta', acao: 'Analisar conta (interno)', interno: true },
 ];
-const ROTULOS = { ...Object.fromEntries(TIPOS.map((t) => [t.tipo, t.rotulo])), reuniao: 'Reunião' };
+const ROTULOS = { ...Object.fromEntries(TIPOS.map((t) => [t.tipo, t.rotulo])), reuniao: 'Reunião', auditoria: 'Auditoria de Atendimento (WhatsApp)' };
 const ABRANGENCIA = { local: 'Local (cidade e região)', regional: 'Regional', nacional: 'Nacional' };
 
 // mesmo filtro do backend (rotas/anexar.js)
@@ -377,9 +377,9 @@ export default function Cliente() {
         )}
       </section>
 
-      <Criativos clienteId={id} ligado={!ligados || ligados.criativo !== false} />
+      <Comercial clienteId={id} aoNovoDocumento={() => listarDocumentos(id).then(setDocumentos).catch(() => {})} />
 
-      <Comercial clienteId={id} />
+      <Criativos clienteId={id} ligado={!ligados || ligados.criativo !== false} />
 
       <Reunioes
         clienteId={id}
