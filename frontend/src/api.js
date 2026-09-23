@@ -57,3 +57,17 @@ export const urlDownload = (doc) => API_URL + doc.url_download;
 // Aba Comercial (WhatsApp): leitura da tabela leads_comercial e disparo da classificação no n8n
 export const lerComercial = (id, periodo = 'semana') => req(`/api/clientes/${id}/comercial?periodo=${periodo}`);
 export const classificarComercial = (id) => req(`/api/clientes/${id}/comercial/classificar`, { method: 'POST' });
+
+// Criativos (contexto -> imagens -> aprovação -> copy -> arte)
+export const listarCriativos = (clienteId) => req(`/api/clientes/${clienteId}/criativos`);
+export function criarCriativo(clienteId, campos, fotos = []) {
+  const form = new FormData();
+  for (const [k, v] of Object.entries(campos)) form.append(k, v ?? '');
+  for (const f of fotos) form.append('fotos', f);
+  return req(`/api/clientes/${clienteId}/criativos`, { method: 'POST', body: form });
+}
+export const refazerImagens = (id, feedback) => req(`/api/criativos/${id}/imagens/refazer`, comJson('POST', { feedback }));
+export const aprovarImagem = (id, arquivoId) => req(`/api/criativos/${id}/imagens/${arquivoId}/aprovar`, comJson('POST', {}));
+export const refazerCopy = (id, feedback) => req(`/api/criativos/${id}/copy/refazer`, comJson('POST', { feedback }));
+export const montarArte = (id, copy) => req(`/api/criativos/${id}/arte`, comJson('POST', copy));
+export const excluirCriativo = (id) => req(`/api/criativos/${id}`, { method: 'DELETE' });

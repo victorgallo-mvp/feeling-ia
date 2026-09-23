@@ -8,7 +8,7 @@ const app = express();
 
 const origens = (process.env.CORS_ORIGIN || '').split(',').map((o) => o.trim()).filter(Boolean);
 app.use(cors({ origin: origens.length ? origens : true }));
-app.use(express.json());
+app.use(express.json({ limit: '25mb' })); // o callback de criativos traz imagens em base64
 
 app.get('/health', (req, res) => res.json({ ok: true }));
 
@@ -19,6 +19,7 @@ app.use('/api', require('./rotas/anexar'));
 app.use('/api', require('./rotas/reunioes'));
 const comercial = require('./rotas/comercial');
 app.use('/api', comercial);
+app.use('/api', require('./rotas/criativos'));
 
 app.use((req, res) => res.status(404).json({ erro: 'rota não encontrada' }));
 

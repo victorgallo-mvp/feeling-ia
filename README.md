@@ -106,3 +106,7 @@ Documento de uso interno (não vai ao cliente), gerado como os outros (`POST /ap
 ## Gravações de reunião (áudio/vídeo)
 
 "Reuniões" e o cadastro assistido aceitam MP3, M4A, WAV, OGG, MP4, WEBM… (até 300 MB). O cockpit converte para mono 16 kHz (ffmpeg, no Dockerfile), corta em trechos de 10 min e manda cada um ao webhook `N8N_WEBHOOK_TRANSCREVER` (workflow "Transcrever Áudio": OpenAI Whisper via crédito do n8n, pt), junta o texto e segue o mesmo fluxo da transcrição em texto. A transcrição fica guardada em `extras.transcricao`; `extras.trechos_audio` registra em quantas partes foi.
+
+## Criativos
+
+Seção "Criativos" na página do cliente. Fluxo com aprovação humana entre etapas: contexto (objetivo, produto, oferta, público, formato, direção visual, fotos do produto) → `POST /api/clientes/:id/criativos` grava o criativo e dispara `N8N_WEBHOOK_CRIATIVO_IMAGEM` (workflow "Criativo — Gerar Imagem": descreve as fotos por URL, Claude monta o prompt, gpt-image gera 2 opções, callback `POST /api/criativos/:id/imagens/concluir` com token) → a pessoa aprova uma imagem (`POST .../imagens/:arquivoId/aprovar`) ou pede outras com comentário (`.../imagens/refazer`) → copy síncrona via `N8N_WEBHOOK_CRIATIVO_COPY` (3 variações + legenda; `.../copy/refazer`) → a pessoa escolhe/edita e `POST .../arte` monta feed 1080×1080 e/ou stories 1080×1920 em template HTML (Chromium) → PNGs para download em `GET /api/arquivos/:id/:token?download=1`. Fotos, imagens e artes ficam na tabela `arquivos` (Postgres) porque o volume do Railway não persiste.

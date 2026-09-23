@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import FormCliente from './FormCliente.jsx';
 import Reunioes from './Reunioes.jsx';
 import Comercial from './Comercial.jsx';
+import Criativos from './Criativos.jsx';
 import SugestoesCadastro, { itensDe } from './SugestoesCadastro.jsx';
 import { anexarDocumento, atualizarCliente, buscarCliente, excluirAnexo, excluirCliente, excluirDocumento, gerarDocumento, listarAnexos, listarDocumentos, listarTipos, registrarSugestaoAnexo, registrarSugestoes, removerPerdidos, resumoExclusao, urlDownload } from '../api.js';
 
@@ -375,6 +376,8 @@ export default function Cliente() {
           </>
         )}
       </section>
+
+      <Criativos clienteId={id} ligado={!ligados || ligados.criativo !== false} />
 
       <Comercial clienteId={id} />
 

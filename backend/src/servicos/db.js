@@ -95,6 +95,36 @@ async function migrar() {
     );
     CREATE INDEX IF NOT EXISTS leads_comercial_cliente_data ON leads_comercial (cliente_id, primeiro_contato);
   `);
+  // Criativos: contexto -> imagens (n8n) -> aprovação -> copy (n8n) -> escolha -> arte (cockpit, template HTML).
+  // Arquivos (fotos, imagens, artes) ficam no Postgres: o volume do Railway não persiste.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS criativos (
+      id SERIAL PRIMARY KEY,
+      cliente_id INT NOT NULL,
+      titulo TEXT,
+      estado TEXT NOT NULL DEFAULT 'imagem_gerando', -- imagem_gerando | imagem_pendente | copy_gerando | copy_pendente | arte_gerando | pronto | erro
+      contexto JSONB,                                 -- objetivo, produto, oferta, publico, formato, estilo
+      imagens JSONB DEFAULT '[]'::jsonb,              -- [{arquivo_id, prompt, racional, aprovada, rodada}]
+      copy JSONB,                                     -- {variacoes:[{headline,texto,cta}], legenda, escolhida:{...}}
+      artes JSONB DEFAULT '[]'::jsonb,                -- [{formato, arquivo_id}]
+      rodada INT DEFAULT 1,
+      erro TEXT,
+      callback_token TEXT,
+      criado_em TIMESTAMPTZ DEFAULT now(),
+      atualizado_em TIMESTAMPTZ DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS arquivos (
+      id SERIAL PRIMARY KEY,
+      criativo_id INT,
+      tipo TEXT,                                      -- foto | imagem | arte
+      nome TEXT,
+      mime TEXT,
+      token TEXT NOT NULL,                            -- vai na URL pública (o n8n precisa baixar as fotos)
+      dados BYTEA NOT NULL,
+      criado_em TIMESTAMPTZ DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS arquivos_criativo ON arquivos (criativo_id);
+  `);
 }
 
 module.exports = { pool, migrar };
