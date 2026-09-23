@@ -100,11 +100,12 @@ router.post('/prospects/:id/localizar', async (req, res) => {
     const d = resp.data || {};
     if (d.erro) throw new Error(d.erro);
     const candidatos = { gmn: d.gmn || [], instagram: d.instagram || [], sites: d.sites || [] };
-    // Confirmação automática só quando há um candidato claro; senão a pessoa escolhe.
+    // Confirmação automática quando o primeiro candidato é claro (≥ 0,8, ou ≥ 0,6 com folga sobre o segundo); a pessoa revisa na tela.
+    const claro = (lista) => lista.length && (lista[0].confianca >= 0.8 || (lista[0].confianca >= 0.6 && (lista.length === 1 || lista[0].confianca - lista[1].confianca >= 0.25)));
     const patch = { candidatos, estado: 'localizado' };
-    if (!p.gmn && candidatos.gmn.length === 1 && candidatos.gmn[0].confianca >= 0.8) patch.gmn = candidatos.gmn[0];
-    if (!p.instagram && candidatos.instagram.length === 1 && candidatos.instagram[0].confianca >= 0.8) patch.instagram = candidatos.instagram[0].username;
-    if (!p.site && candidatos.sites.length === 1 && candidatos.sites[0].confianca >= 0.8) patch.site = candidatos.sites[0].url;
+    if (!p.gmn && claro(candidatos.gmn)) patch.gmn = candidatos.gmn[0];
+    if (!p.instagram && claro(candidatos.instagram)) patch.instagram = candidatos.instagram[0].username;
+    if (!p.site && claro(candidatos.sites)) patch.site = candidatos.sites[0].url;
     await atualizar(p.id, patch);
     res.json(publico(await buscar(p.id)));
   } catch (e) {

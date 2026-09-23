@@ -69,43 +69,50 @@ export function ListaProspects() {
 
 function Candidatos({ p, aoConfirmar, ocupado }) {
   const c = p.candidatos || { gmn: [], instagram: [], sites: [] };
-  const [gmn, setGmn] = useState(p.gmn && !p.gmn.inexistente ? JSON.stringify(p.gmn) : (p.gmn?.inexistente ? 'nenhum' : ''));
-  const [ig, setIg] = useState(p.instagram || '');
-  const [site, setSite] = useState(p.site || '');
-  const [semIg, setSemIg] = useState(false);
-  const [semSite, setSemSite] = useState(false);
+  const [gmn, setGmn] = useState(p.gmn && !p.gmn.inexistente ? JSON.stringify(p.gmn) : (p.gmn?.inexistente ? 'nenhum' : (c.gmn[0] ? JSON.stringify(c.gmn[0]) : '')));
+  const [ig, setIg] = useState(p.instagram || c.instagram[0]?.username || '');
+  const [igOutro, setIgOutro] = useState('');
+  const [site, setSite] = useState(p.site || c.sites[0]?.url || '');
+  const [siteOutro, setSiteOutro] = useState('');
+  const pct = (x) => `${Math.round((x.confianca || 0) * 100)}%`;
+  const igFinal = ig === 'outro' ? igOutro.replace(/^@/, '').trim() : ig === 'nenhum' ? '' : ig;
+  const siteFinal = site === 'outro' ? siteOutro.trim() : site === 'nenhum' ? '' : site;
   return (
     <div className="form">
       <h3>Confirme o que foi encontrado</h3>
+      <p className="form-ajuda">Candidatos da busca por nome + cidade, com a confiança de cada um. Se nenhum for o negócio certo, escolha "não tem" — a ausência entra no diagnóstico. Nome ou cidade errados? Edite os dados e localize de novo.</p>
       <div className="form-grade">
         <div className="form-campo form-campo-largo">
           <label>Ficha no Google Meu Negócio</label>
-          <select value={gmn} onChange={(e) => setGmn(e.target.value)} disabled={ocupado}>
-            <option value="">— escolha —</option>
-            {c.gmn.map((g, i) => <option key={i} value={JSON.stringify(g)}>{g.nome} · {g.endereco || g.categoria || ''}{g.nota ? ` · ${g.nota} (${g.avaliacoes || 0})` : ''}</option>)}
-            <option value="nenhum">Não tem ficha no Google (não encontrada)</option>
-          </select>
+          {c.gmn.length === 0 && <p className="doc-data">Nenhuma ficha encontrada para "{p.nome}" em "{p.cidade || 'cidade não informada'}".</p>}
+          {c.gmn.map((g, i) => (
+            <label key={i} className="opcao"><input type="radio" name="gmn" checked={gmn === JSON.stringify(g)} onChange={() => setGmn(JSON.stringify(g))} disabled={ocupado} /> <strong>{g.nome}</strong> · {g.endereco || g.categoria || ''} <span className="doc-data">({pct(g)})</span></label>
+          ))}
+          <label className="opcao"><input type="radio" name="gmn" checked={gmn === 'nenhum'} onChange={() => setGmn('nenhum')} disabled={ocupado} /> Não tem ficha no Google</label>
         </div>
         <div className="form-campo">
           <label>Instagram</label>
-          <input list="ig-cand" value={semIg ? '' : ig} onChange={(e) => setIg(e.target.value.replace(/^@/, ''))} disabled={ocupado || semIg} placeholder="@perfil" />
-          <datalist id="ig-cand">{c.instagram.map((x, i) => <option key={i} value={x.username}>{x.titulo || ''}</option>)}</datalist>
-          <label className="opcao"><input type="checkbox" checked={semIg} onChange={(e) => setSemIg(e.target.checked)} disabled={ocupado} /> Não tem Instagram</label>
+          {c.instagram.map((x, i) => (
+            <label key={i} className="opcao"><input type="radio" name="ig" checked={ig === x.username} onChange={() => setIg(x.username)} disabled={ocupado} /> @{x.username} <span className="doc-data">({pct(x)})</span></label>
+          ))}
+          <label className="opcao"><input type="radio" name="ig" checked={ig === 'outro'} onChange={() => setIg('outro')} disabled={ocupado} /> Outro: <input value={igOutro} onChange={(e) => { setIgOutro(e.target.value); setIg('outro'); }} placeholder="@perfil" disabled={ocupado} /></label>
+          <label className="opcao"><input type="radio" name="ig" checked={ig === 'nenhum'} onChange={() => setIg('nenhum')} disabled={ocupado} /> Não tem Instagram</label>
         </div>
         <div className="form-campo">
           <label>Site</label>
-          <input list="site-cand" value={semSite ? '' : site} onChange={(e) => setSite(e.target.value)} disabled={ocupado || semSite} placeholder="www…" />
-          <datalist id="site-cand">{c.sites.map((x, i) => <option key={i} value={x.url}>{x.titulo || ''}</option>)}</datalist>
-          <label className="opcao"><input type="checkbox" checked={semSite} onChange={(e) => setSemSite(e.target.checked)} disabled={ocupado} /> Não tem site</label>
+          {c.sites.map((x, i) => (
+            <label key={i} className="opcao"><input type="radio" name="site" checked={site === x.url} onChange={() => setSite(x.url)} disabled={ocupado} /> {x.url.replace(/^https?:\/\//, '')} <span className="doc-data">({pct(x)})</span></label>
+          ))}
+          <label className="opcao"><input type="radio" name="site" checked={site === 'outro'} onChange={() => setSite('outro')} disabled={ocupado} /> Outro: <input value={siteOutro} onChange={(e) => { setSiteOutro(e.target.value); setSite('outro'); }} placeholder="www…" disabled={ocupado} /></label>
+          <label className="opcao"><input type="radio" name="site" checked={site === 'nenhum'} onChange={() => setSite('nenhum')} disabled={ocupado} /> Não tem site</label>
         </div>
       </div>
       <div className="acoes">
-        <button type="button" className="botao" disabled={ocupado || !gmn} onClick={() => aoConfirmar({
+        <button type="button" className="botao" disabled={ocupado || !gmn || !ig || !site} onClick={() => aoConfirmar({
           gmn: gmn === 'nenhum' ? null : JSON.parse(gmn), sem_gmn: gmn === 'nenhum',
-          instagram: semIg ? null : ig || null, sem_instagram: semIg, site: semSite ? null : site || null, sem_site: semSite,
+          instagram: igFinal || null, sem_instagram: !igFinal, site: siteFinal || null, sem_site: !siteFinal,
         })}>Confirmar e coletar dados</button>
       </div>
-      <p className="form-ajuda">Candidatos vêm da busca por nome + cidade. Se nenhum for o negócio certo, marque "não tem" — a ausência entra no diagnóstico.</p>
     </div>
   );
 }
