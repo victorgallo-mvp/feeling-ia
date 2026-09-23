@@ -71,3 +71,15 @@ export const aprovarImagem = (id, arquivoId) => req(`/api/criativos/${id}/imagen
 export const refazerCopy = (id, feedback) => req(`/api/criativos/${id}/copy/refazer`, comJson('POST', { feedback }));
 export const montarArte = (id, copy) => req(`/api/criativos/${id}/arte`, comJson('POST', copy));
 export const excluirCriativo = (id) => req(`/api/criativos/${id}`, { method: 'DELETE' });
+
+// Prospecção (diagnóstico de presença digital)
+export const listarProspects = () => req('/api/prospects');
+export const criarProspect = (dados) => req('/api/prospects', comJson('POST', dados));
+export const buscarProspect = (id) => req(`/api/prospects/${id}`);
+export const atualizarProspect = (id, dados) => req(`/api/prospects/${id}`, comJson('PUT', dados));
+export const excluirProspect = (id) => req(`/api/prospects/${id}`, { method: 'DELETE' });
+export const localizarProspect = (id) => req(`/api/prospects/${id}/localizar`, comJson('POST', {}));
+export const confirmarProspect = (id, dados) => req(`/api/prospects/${id}/confirmar`, comJson('POST', dados));
+export const coletarProspect = (id) => req(`/api/prospects/${id}/coletar`, comJson('POST', {}));
+export const gerarDiagnostico = (id) => req(`/api/prospects/${id}/documento`, comJson('POST', {}));
+export const virarCliente = (id) => req(`/api/prospects/${id}/virar-cliente`, comJson('POST', {}));

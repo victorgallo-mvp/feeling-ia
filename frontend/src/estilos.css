@@ -305,3 +305,18 @@ code {
 .copy-opcao strong { font-size: 15px; }
 .copy-opcao em { color: #2f6f6a; font-style: normal; font-weight: 600; }
 .copy-escolhida { border-color: #2f6f6a; background: var(--fundo); }
+
+/* abas do topo e prospecção */
+.topo-interno { display: flex; align-items: center; gap: 28px; max-width: 912px; margin: 0 auto; }
+.topo .marca { margin: 0; }
+.abas { display: flex; gap: 6px; }
+.aba { padding: 6px 12px; border-radius: 999px; color: rgba(255,255,255,0.75); text-decoration: none; font-size: 14px; }
+.aba:hover { color: #fff; }
+.aba-ativa { background: rgba(255,255,255,0.14); color: #fff; font-weight: 600; }
+.fatos { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px 18px; margin: 8px 0; font-size: 14px; }
+.fatos dt { color: var(--texto-suave); font-size: 12px; text-transform: capitalize; }
+.fatos dd { margin: 0; }
+.frente { padding: 12px 0; border-top: 1px solid var(--linha); }
+.nota-boa .kpi-valor, .etiqueta.nota-boa { color: #1f7a4d; }
+.nota-media .kpi-valor, .etiqueta.nota-media { color: #b7791f; }
+.nota-ruim .kpi-valor, .etiqueta.nota-ruim { color: var(--erro); }

@@ -125,6 +125,28 @@ async function migrar() {
     );
     CREATE INDEX IF NOT EXISTS arquivos_criativo ON arquivos (criativo_id);
   `);
+  // Prospecção: negócio ainda não cliente. Localizar (candidatos de ficha/Instagram/site) -> confirmar -> coletar
+  // (Apify Maps + Instagram, PageSpeed, rastreio do site, no n8n) -> scorecard -> PDF de diagnóstico -> virar cliente.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS prospects (
+      id SERIAL PRIMARY KEY,
+      nome TEXT NOT NULL,
+      cidade TEXT,
+      setor TEXT,
+      site TEXT,
+      instagram TEXT,                       -- handle confirmado
+      gmn JSONB,                            -- ficha confirmada {place_id, nome, endereco, url}
+      candidatos JSONB,                     -- resultado da localização {gmn:[], instagram:[], sites:[]}
+      estado TEXT NOT NULL DEFAULT 'novo',  -- novo | localizando | localizado | coletando | pronto | erro
+      diagnostico JSONB,                    -- dados coletados + notas por frente
+      erro TEXT,
+      callback_token TEXT,
+      cliente_id INT,                       -- preenchido quando vira cliente
+      criado_em TIMESTAMPTZ DEFAULT now(),
+      atualizado_em TIMESTAMPTZ DEFAULT now()
+    );
+    ALTER TABLE documentos_gerados ADD COLUMN IF NOT EXISTS prospect_id INT; -- diagnóstico de prospect (sem cliente_id)
+  `);
 }
 
 module.exports = { pool, migrar };

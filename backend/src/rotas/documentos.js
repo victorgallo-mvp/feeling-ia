@@ -56,7 +56,7 @@ router.get('/documentos/:id/download', async (req, res) => {
     } else if (doc.markdown) {
       // PDF perdido num deploy: refaz a partir do texto e grava de novo
       pdf = Buffer.from(await markdownParaPdf(doc.markdown)); // Puppeteer devolve Uint8Array; res.send precisa de Buffer
-      const caminho = await salvarPdf(pdf, doc.cliente_id, doc.tipo);
+      const caminho = await salvarPdf(pdf, doc.cliente_id ?? 'prospect', doc.tipo);
       await pool.query('UPDATE documentos_gerados SET caminho = $1 WHERE id = $2', [caminho, doc.id]);
     } else {
       return res.status(404).json({ erro: 'PDF perdido e sem texto salvo — gere o documento de novo' });

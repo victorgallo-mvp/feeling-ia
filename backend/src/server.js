@@ -20,6 +20,7 @@ app.use('/api', require('./rotas/reunioes'));
 const comercial = require('./rotas/comercial');
 app.use('/api', comercial);
 app.use('/api', require('./rotas/criativos'));
+app.use('/api', require('./rotas/prospeccao'));
 
 app.use((req, res) => res.status(404).json({ erro: 'rota não encontrada' }));
 

@@ -15,6 +15,7 @@ const WEBHOOKS_EXTRA = {
   comercial: process.env.N8N_WEBHOOK_COMERCIAL, // classificação das conversas do WhatsApp (aba Comercial)
   transcrever: process.env.N8N_WEBHOOK_TRANSCREVER, // gravação de reunião -> texto (Whisper)
   criativo: process.env.N8N_WEBHOOK_CRIATIVO_IMAGEM, // criativos: imagem (gpt-image) — copy usa N8N_WEBHOOK_CRIATIVO_COPY
+  prospeccao: process.env.N8N_WEBHOOK_PROSPECT_LOCALIZAR, // prospecção: localizar (coletar/diagnóstico têm os seus)
 };
 
 // Quais tipos têm workflow ligado — o painel usa pra mostrar "em breve" nos que faltam.
