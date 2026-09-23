@@ -74,12 +74,13 @@ function Candidatos({ p, aoConfirmar, ocupado }) {
   const [igOutro, setIgOutro] = useState('');
   const [site, setSite] = useState(p.site || c.sites[0]?.url || '');
   const [siteOutro, setSiteOutro] = useState('');
-  const pct = (x) => `${Math.round((x.confianca || 0) * 100)}%`;
+  const pct = (x) => (x.informado ? 'informado por você' : `${Math.round((x.confianca || 0) * 100)}%`);
+  const tudoPreenchido = !!(gmn && ig && site);
   const igFinal = ig === 'outro' ? igOutro.replace(/^@/, '').trim() : ig === 'nenhum' ? '' : ig;
   const siteFinal = site === 'outro' ? siteOutro.trim() : site === 'nenhum' ? '' : site;
   return (
     <div className="form">
-      <h3>Confirme o que foi encontrado</h3>
+      <h3>{tudoPreenchido ? 'Confirme (já vem pré-selecionado)' : 'Confirme o que foi encontrado'}</h3>
       <p className="form-ajuda">Candidatos da busca por nome + cidade, com a confiança de cada um. Se nenhum for o negócio certo, escolha "não tem" — a ausência entra no diagnóstico. Nome ou cidade errados? Edite os dados e localize de novo.</p>
       <div className="form-grade">
         <div className="form-campo form-campo-largo">

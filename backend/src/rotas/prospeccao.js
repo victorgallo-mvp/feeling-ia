@@ -100,6 +100,16 @@ router.post('/prospects/:id/localizar', async (req, res) => {
     const d = resp.data || {};
     if (d.erro) throw new Error(d.erro);
     const candidatos = { gmn: d.gmn || [], instagram: d.instagram || [], sites: d.sites || [] };
+    // O que a pessoa já informou no cadastro vira a primeira opção, com confiança total — não faz sentido pedir para escolher de novo.
+    const limpar = (v) => String(v || '').toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, '');
+    const comInformado = (lista, campo, valor, extra) => {
+      if (!valor) return lista;
+      const achado = lista.find((x) => limpar(x[campo]) === limpar(valor));
+      if (achado) { achado.confianca = 1; achado.informado = true; return [achado, ...lista.filter((x) => x !== achado)]; }
+      return [{ [campo]: valor, confianca: 1, informado: true, ...extra }, ...lista];
+    };
+    candidatos.instagram = comInformado(candidatos.instagram, 'username', p.instagram, { url: `https://www.instagram.com/${p.instagram}/` });
+    candidatos.sites = comInformado(candidatos.sites, 'url', p.site, {});
     // Confirmação automática quando o primeiro candidato é claro (≥ 0,8, ou ≥ 0,6 com folga sobre o segundo); a pessoa revisa na tela.
     const claro = (lista) => lista.length && (lista[0].confianca >= 0.8 || (lista[0].confianca >= 0.6 && (lista.length === 1 || lista[0].confianca - lista[1].confianca >= 0.25)));
     const patch = { candidatos, estado: 'localizado' };

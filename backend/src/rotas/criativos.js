@@ -212,9 +212,9 @@ async function gerarCopy(id, feedback) {
     const aprovada = (c.imagens || []).find((i) => i.aprovada);
     const { fotos: _f, ...contexto } = c.contexto || {};
     const resp = await axios.post(url, {
-      criativo_id: c.id, cliente_nome: cliente.nome, perfil: cliente.perfil || '', orientacoes: cliente.orientacoes || '',
+      criativo_id: c.id, cliente_id: cliente.id, cliente_nome: cliente.nome, perfil: cliente.perfil || '', orientacoes: cliente.orientacoes || '',
       contexto, racional_imagem: aprovada?.racional || '', feedback: texto(feedback, 600),
-    }, { timeout: 120000, headers: { 'Content-Type': 'application/json' } });
+    }, { timeout: 170000, headers: { 'Content-Type': 'application/json' } });
     const d = resp.data || {};
     if (d.erro || !Array.isArray(d.variacoes) || !d.variacoes.length) throw new Error(d.erro || 'o n8n não devolveu variações de copy');
     await atualizar(id, { copy: { variacoes: d.variacoes, legenda: d.legenda || '', escolhida: c.copy?.escolhida || null }, estado: 'copy_pendente', erro: null });
