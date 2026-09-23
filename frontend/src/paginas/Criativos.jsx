@@ -3,8 +3,18 @@ import { aprovarCopies, criarCriativo, editarCopy, escolherImagem, excluirCriati
 
 const OBJETIVOS = [['vendas', 'Vendas (site)'], ['mensagens', 'Mensagens (WhatsApp)'], ['leads', 'Leads (formulário)'], ['reconhecimento', 'Reconhecimento']];
 const ESTADO = {
-  copy_gerando: 'escrevendo as copies…', copy_pendente: 'aprove as copies', imagem_gerando: 'gerando imagens…',
-  imagem_pendente: 'escolha as imagens', arte_gerando: 'montando as artes…', pronto: 'pronto', erro: 'falhou',
+  copy_gerando: 'montando as peças…', copy_pendente: 'aprove as peças', imagem_gerando: 'gerando imagens…',
+  imagem_pendente: 'escolha as imagens', arte_pendente: 'pronto para montar', arte_gerando: 'montando as artes…',
+  pronto: 'pronto', erro: 'falhou',
+};
+// nome dos blocos, para mostrar como a peça foi composta
+const BLOCO = {
+  marca: 'logo', titulo: 'título', subtitulo: 'subtítulo', texto: 'parágrafo', imagem: 'foto',
+  grade: 'grade', comparativo: 'comparativo', selo: 'selo', lista_check: 'lista com check', cta: 'botão', rodape: 'rodapé',
+};
+const resumoPeca = (peca) => {
+  const nomes = (peca?.blocos || []).flatMap((b) => (b.tipo === 'linha' ? (b.partes || []).map((x) => BLOCO[x.tipo] || x.tipo) : [BLOCO[b.tipo] || b.tipo]));
+  return [...new Set(nomes)].join(' · ');
 };
 const GIRANDO = ['copy_gerando', 'imagem_gerando', 'arte_gerando'];
 const fmtData = (iso) => new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
@@ -48,9 +58,9 @@ function NovoCriativo({ clienteId, ligado, aoCriar }) {
       </div>
       {erro && <p className="aviso aviso-erro">{erro}</p>}
       <div className="acoes form-acoes">
-        <button type="submit" className="botao" disabled={ocupado}>{ocupado ? <><span className="girando" aria-hidden="true" /> Enviando…</> : 'Escrever as copies'}</button>
+        <button type="submit" className="botao" disabled={ocupado}>{ocupado ? <><span className="girando" aria-hidden="true" /> Enviando…</> : 'Montar as peças'}</button>
       </div>
-      <p className="form-ajuda">A IA lê o briefing, a análise de presença, a pesquisa, a última reunião e os anexos do cliente e escreve 3 copies com ângulos diferentes. Você edita e aprova as que quiser; cada copy aprovada vira um criativo com imagem e arte próprias.</p>
+      <p className="form-ajuda">A IA lê o briefing, a análise de presença, a pesquisa, a última reunião e os anexos do cliente e monta 3 peças com ângulos diferentes — escolhendo o que cada caso pede (grade de serviços, comparativo, selo de condição, foto). Você edita e aprova as que quiser. O logo, as cores e o telefone vêm da ficha do cliente.</p>
     </form>
   );
 }
@@ -99,7 +109,9 @@ function VersaoCopy({ c, v, marcada, marcar, travado, aoAtualizar, aoErro }) {
         </>
       )}
       {v.racional && <p className="doc-data"><strong>Por que este ângulo:</strong> {v.racional}</p>}
-      {v.direcao_imagem && <p className="doc-data"><strong>Imagem pedida:</strong> {v.direcao_imagem}</p>}
+      {v.peca?.blocos?.length > 0 && <p className="doc-data"><strong>Peça montada com:</strong> {resumoPeca(v.peca)}</p>}
+      {v.direcao_imagem && <p className="doc-data"><strong>Foto pedida:</strong> {v.direcao_imagem}</p>}
+      {v.peca?.blocos?.length > 0 && !(v.slots || []).length && <p className="doc-data">Sem foto de IA: a composição usa texto e ícones.</p>}
     </div>
   );
 }
@@ -108,7 +120,6 @@ function Cartao({ c, aoAtualizar, aoExcluir }) {
   const [marcadas, setMarcadas] = useState([]);
   const [feedback, setFeedback] = useState('');
   const [feedbackImg, setFeedbackImg] = useState({});
-  const [layout, setLayout] = useState('sobreposto');
   const [ocupado, setOcupado] = useState(false);
   const [erro, setErro] = useState('');
 
@@ -162,7 +173,7 @@ function Cartao({ c, aoAtualizar, aoExcluir }) {
               {!aprovadas.length && (
                 <>
                   <input value={feedback} onChange={(e) => setFeedback(e.target.value)} placeholder="outros ângulos? ex.: mais direto, falar de garantia, tom menos formal" disabled={ocupado} />
-                  <button type="button" className="botao botao-secundario" disabled={ocupado} onClick={() => agir(async () => { const r = await refazerCopy(c.id, feedback); setFeedback(''); return r; })}>Outras copies</button>
+                  <button type="button" className="botao botao-secundario" disabled={ocupado} onClick={() => agir(async () => { const r = await refazerCopy(c.id, feedback); setFeedback(''); return r; })}>Outras peças</button>
                 </>
               )}
               <button type="button" className="botao" disabled={ocupado || !marcadas.length || mesmaSelecao} onClick={() => agir(() => aprovarCopies(c.id, marcadas))}>
@@ -201,15 +212,9 @@ function Cartao({ c, aoAtualizar, aoExcluir }) {
         );
       })}
 
-      {aprovadas.length > 0 && (c.imagens || []).length > 0 && !girando && (
+      {aprovadas.length > 0 && !girando && ['imagem_pendente', 'arte_pendente', 'pronto', 'erro'].includes(c.estado) && (
         <div className="linha-feedback">
-          <div className="form-campo">
-            <label htmlFor={`layout-${c.id}`}>Layout da arte</label>
-            <select id={`layout-${c.id}`} value={layout} onChange={(e) => setLayout(e.target.value)} disabled={ocupado}>
-              {Object.entries(c.layouts || { sobreposto: 'Texto sobre a foto' }).map(([v, r]) => <option key={v} value={v}>{r}</option>)}
-            </select>
-          </div>
-          <button type="button" className="botao" disabled={ocupado || faltaEscolher.length > 0} onClick={() => agir(() => montarArtes(c.id, layout))}>
+          <button type="button" className="botao" disabled={ocupado || faltaEscolher.length > 0} onClick={() => agir(() => montarArtes(c.id))}>
             {c.artes?.length ? 'Montar as artes de novo' : `Montar ${aprovadas.length > 1 ? `as ${aprovadas.length} artes` : 'a arte'}`}
           </button>
           {faltaEscolher.length > 0 && <span className="doc-data">escolha a imagem de: {faltaEscolher.map((v) => v.angulo).join(', ')}</span>}
@@ -218,7 +223,7 @@ function Cartao({ c, aoAtualizar, aoExcluir }) {
 
       {c.artes?.length > 0 && (
         <>
-          <h4>Artes ({c.artes[0].layout})</h4>
+          <h4>Artes</h4>
           {aprovadas.map((v) => artesDe(v.id).length > 0 && (
             <div key={v.id} className="bloco-versao">
               <p className="doc-data">{v.angulo} — {v.headline}</p>

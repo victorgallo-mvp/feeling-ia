@@ -316,6 +316,7 @@ code {
 .copy-escolhida { border-color: #2f6f6a; background: var(--fundo); }
 .copy-aprovada { border-color: #2f6f6a; }
 .bloco-versao { margin: 14px 0; padding-left: 12px; border-left: 3px solid var(--linha); }
+.previa-logo { display: block; margin-top: 8px; max-height: 64px; max-width: 220px; object-fit: contain; background: var(--marinho); border-radius: 6px; padding: 8px; }
 
 /* abas do topo e prospecção */
 .topo-interno { display: flex; align-items: center; gap: 28px; max-width: 912px; margin: 0 auto; }

@@ -43,6 +43,10 @@ async function migrar() {
     ALTER TABLE clientes ADD COLUMN IF NOT EXISTS extras JSONB;        -- sugestoes: [{id, origem, criado_em, sugestoes, aplicadas}]; comercial: estado da classificação
     ALTER TABLE clientes ADD COLUMN IF NOT EXISTS whatsapp_ativo BOOLEAN; -- aba Comercial ligada
     ALTER TABLE clientes ADD COLUMN IF NOT EXISTS whatsapp_webhook TEXT;  -- webhook de classificação próprio (opcional; padrão N8N_WEBHOOK_COMERCIAL)
+    -- identidade da marca: sem isso o criativo sai com a paleta genérica e sem logo
+    ALTER TABLE clientes ADD COLUMN IF NOT EXISTS telefone TEXT;        -- vai no rodapé da peça
+    ALTER TABLE clientes ADD COLUMN IF NOT EXISTS cor_primaria TEXT;    -- fundo da peça (hex)
+    ALTER TABLE clientes ADD COLUMN IF NOT EXISTS cor_destaque TEXT;    -- títulos, selo e botão (hex)
   `);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS documentos_gerados (
@@ -129,6 +133,9 @@ async function migrar() {
       criado_em TIMESTAMPTZ DEFAULT now()
     );
     CREATE INDEX IF NOT EXISTS arquivos_criativo ON arquivos (criativo_id);
+    -- o logo do cliente também mora em arquivos (tipo 'logo'), solto de criativo
+    ALTER TABLE arquivos ADD COLUMN IF NOT EXISTS cliente_id INTEGER;
+    CREATE INDEX IF NOT EXISTS arquivos_cliente ON arquivos (cliente_id);
   `);
   // Prospecção: negócio ainda não cliente. Localizar (candidatos de ficha/Instagram/site) -> confirmar -> coletar
   // (Apify Maps + Instagram, PageSpeed, rastreio do site, no n8n) -> scorecard -> PDF de diagnóstico -> virar cliente.

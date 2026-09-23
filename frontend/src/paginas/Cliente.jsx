@@ -5,7 +5,7 @@ import Reunioes from './Reunioes.jsx';
 import Comercial from './Comercial.jsx';
 import Criativos from './Criativos.jsx';
 import SugestoesCadastro, { itensDe } from './SugestoesCadastro.jsx';
-import { anexarDocumento, atualizarCliente, buscarCliente, excluirAnexo, excluirCliente, excluirDocumento, gerarDocumento, listarAnexos, listarDocumentos, listarTipos, registrarSugestaoAnexo, registrarSugestoes, removerPerdidos, resumoExclusao, urlDownload } from '../api.js';
+import { anexarDocumento, atualizarCliente, buscarCliente, enviarLogo, excluirAnexo, excluirCliente, excluirDocumento, gerarDocumento, listarAnexos, listarDocumentos, listarTipos, registrarSugestaoAnexo, registrarSugestoes, removerPerdidos, resumoExclusao, urlDownload, urlLogo } from '../api.js';
 
 const TIPOS = [
   { tipo: 'relatorio', rotulo: 'Relatório', acao: 'Gerar Relatório' },
@@ -356,7 +356,8 @@ export default function Cliente() {
           <SugestoesCadastro key={f.chave} fonte={f} cliente={cliente} aoAtualizarCliente={setCliente} aoRegistrado={(fonte, dados, r) => fonte.depois(dados, r)} />
         ))}
         {editando ? (
-          <FormCliente inicial={cliente} rotuloSalvar="Salvar" aoSalvar={salvarCliente} aoCancelar={() => setEditando(false)} />
+          <FormCliente inicial={cliente} rotuloSalvar="Salvar" aoSalvar={salvarCliente} aoCancelar={() => setEditando(false)}
+            logoUrl={urlLogo(cliente)} aoEnviarLogo={async (f) => { try { await enviarLogo(cliente.id, f); await carregar(); } catch (e) { setErro(e.message); } }} />
         ) : (
           <>
             <dl className="ficha">

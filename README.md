@@ -119,7 +119,24 @@ Fluxo, com aprovação humana entre as etapas:
 4. **Imagens** (`N8N_WEBHOOK_CRIATIVO_IMAGEM`, uma chamada por copy aprovada, cada uma com seu `versao_id`): a direção de imagem da copy é a instrução principal do prompt; gpt-image devolve 2 opções por copy no callback `POST .../imagens/concluir`. `POST .../imagens/refazer` refaz só uma versão, com comentário; `POST .../imagens/:arquivoId/escolher` fixa a imagem daquela copy.
 5. **Artes** (`POST .../artes`): monta uma peça por copy aprovada × formato pedido, num dos três layouts — `sobreposto` (texto sobre a foto com véu), `faixa` (foto em cima, faixa colorida com o texto embaixo) e `cartao` (cartão claro sobre a foto). Feed 1080×1080 e stories 1080×1920 em template HTML (Chromium, um único navegador para o lote). PNGs em `GET /api/arquivos/:id/:token?download=1`.
 
-O texto nunca é gerado dentro da imagem: o prompt proíbe letras, logo e selo, e pede o terço inferior limpo porque é onde o template encaixa headline e botão. Fotos, imagens e artes ficam na tabela `arquivos` (Postgres) porque o volume do Railway não persiste.
+O texto nunca é gerado dentro da imagem: o gerador de imagem escreve errado. Quem desenha o texto é o motor de peça, onde ele renderiza perfeito. Fotos, imagens, artes e o logo do cliente ficam na tabela `arquivos` (Postgres) porque o volume do Railway não persiste.
+
+### Motor de peça: catálogo de blocos, não modelo por caso
+
+`servicos/peca.js` não tem um layout por tipo de cliente — tem um **catálogo de blocos** que se encaixam em qualquer ordem, e a IA monta a composição do caso:
+
+`marca` (logo) · `titulo` (2 linhas, a 2ª na cor de destaque) · `subtitulo` · `texto` (com `**destaque**`) · `imagem` (hero, faixa, inset, fundo) · `grade` (2 a 8 itens com ícone ou foto + rótulo) · `comparativo` (2 colunas) · `selo` (condição ou preço) · `lista_check` · `cta` · `rodape` (WhatsApp, cidade, preço) · `linha` (dois blocos lado a lado)
+
+As três peças de referência da casa são a mesma coisa remontada: serviços = marca + título + subtítulo + grade + rodapé; comparativo = título-pergunta + imagem + comparativo + lista de check + rodapé; vitrine = título + hero + selo + grade + rodapé de preço.
+
+Dois detalhes que fazem qualquer combinação funcionar sem calibrar peça por peça:
+
+- **Auto-ajuste**: depois de renderizar, o motor procura por busca binária a escala de tipografia (0,5 a 1,3) em que o conteúdo caiba — conferindo altura **e largura** (sem a largura, título grande passava por cima do bloco vizinho). Peça com poucos blocos cresce; peça densa diminui.
+- **Ícones da casa** (22 em SVG de traço, herdando a cor da marca): a grade de serviços usa ícone, não 8 imagens de IA — consistente e sem custo por peça.
+
+A composição é validada no n8n antes de voltar: bloco fora do catálogo é descartado, texto que passa do limite é cortado, no máximo uma imagem por peça, rodapé sempre por último, e título e marca são inseridos se a IA esquecer. Assim a peça nunca quebra na frente da pessoa.
+
+A identidade vem da ficha do cliente: `logo` (upload em `POST /api/clientes/:id/logo`), `cor_primaria`, `cor_destaque`, `telefone` e `cidade`. Sem eles a peça sai na paleta da Feeling, sem logo e sem rodapé de contato.
 
 ## Prospecção (diagnóstico de presença digital)
 

@@ -1,14 +1,14 @@
 // src/rotas/criativos.js
-// Criativos: contexto -> COPY primeiro (n8n lê o material do cliente e devolve 3 ângulos) -> a pessoa edita e
-// aprova as que quiser -> imagens por copy aprovada (n8n) -> escolhe a imagem -> artes no template (cockpit).
-// O cockpit junta o material (briefing, análise de presença, pesquisa, reunião) e guarda arquivos no Postgres; a IA fica no n8n.
+// Criativos: contexto -> a IA lê o material do cliente e MONTA 3 peças (copy + composição de blocos) -> a pessoa
+// edita e aprova as que quiser -> foto só quando a composição pede -> render da peça (cockpit, motor de blocos).
+// Não existe modelo por caso: existe catálogo de blocos, e a IA escolhe os do caso. Marca e contato vêm da ficha.
 const crypto = require('crypto');
 const express = require('express');
 const multer = require('multer');
 const axios = require('axios');
 const router = express.Router();
 const { pool } = require('../servicos/db');
-const { montarLote, FORMATOS, LAYOUTS } = require('../servicos/arte');
+const { montarPecas, FORMATOS } = require('../servicos/peca');
 
 const OBJETIVOS = ['vendas', 'mensagens', 'leads', 'reconhecimento'];
 const FORMATOS_PEDIDO = ['feed', 'stories', 'ambos'];
@@ -62,13 +62,32 @@ function apresentar(c, base) {
     fotos: (c.contexto?.fotos || []).map(comUrl),
     imagens: (c.imagens || []).map(comUrl),
     artes: (c.artes || []).map(comUrl),
-    layouts: LAYOUTS,
   };
 }
 
 async function clienteDe(id) {
-  const { rows } = await pool.query('SELECT id, nome, perfil, orientacoes FROM clientes WHERE id = $1', [id]);
+  const { rows } = await pool.query(
+    `SELECT id, nome, perfil, orientacoes, cidade, telefone, cor_primaria, cor_destaque, abrangencia,
+            (SELECT id FROM arquivos a WHERE a.cliente_id = clientes.id AND a.tipo = 'logo' ORDER BY a.id DESC LIMIT 1) AS logo_id
+       FROM clientes WHERE id = $1`, [id]);
   return rows[0] || null;
+}
+
+// Identidade da marca para a peça: logo em data URL + paleta + contato do rodapé.
+async function marcaDe(cliente) {
+  let logo = '';
+  if (cliente.logo_id) {
+    const { rows } = await pool.query('SELECT mime, dados FROM arquivos WHERE id = $1', [cliente.logo_id]);
+    if (rows.length) logo = `data:${rows[0].mime};base64,${rows[0].dados.toString('base64')}`;
+  }
+  return {
+    logo, cor_primaria: cliente.cor_primaria || null, cor_destaque: cliente.cor_destaque || null,
+    rodape: {
+      whatsapp: cliente.telefone || '',
+      cidade: cliente.cidade || '',
+      abrangencia: cliente.abrangencia === 'local' ? '' : (cliente.cidade ? 'Atendemos toda a região' : ''),
+    },
+  };
 }
 
 // Junta o material do cliente que já está no cockpit: o documento mais recente de cada tipo.
@@ -108,6 +127,8 @@ async function pedirCopy(req, criativo, cliente, feedback = '') {
   const resp = await axios.post(url, {
     criativo_id: criativo.id, cliente_id: cliente.id, cliente_nome: cliente.nome,
     perfil: cliente.perfil || '', orientacoes: cliente.orientacoes || '',
+    cidade: cliente.cidade || '', telefone: cliente.telefone || '',
+    fotos: (criativo.contexto?.fotos || []).map((f) => f.nome),
     contexto, material, quantidade: COPIES_POR_RODADA, feedback, headlines_anteriores: anteriores,
     callback_url: `${base}/api/criativos/${criativo.id}/copy/concluir`, callback_token: token,
   }, { timeout: 30000, headers: { 'Content-Type': 'application/json' } });
@@ -217,6 +238,9 @@ router.post('/criativos/:id/copy/concluir', async (req, res) => {
       angulo: texto(v.angulo, 60) || `versão ${i + 1}`,
       headline: texto(v.headline, 80), texto: texto(v.texto, 200), cta: texto(v.cta, 30),
       legenda: texto(v.legenda, 1200), racional: texto(v.racional, 400), direcao_imagem: texto(v.direcao_imagem, 500),
+      // a IA monta a peça escolhendo blocos do catálogo; `slots` são as fotos que essa composição pede (0 ou 1)
+      peca: v.peca && Array.isArray(v.peca.blocos) ? { blocos: v.peca.blocos } : null,
+      slots: Array.isArray(v.slots) ? v.slots.slice(0, 2) : [],
       aprovada: false, editada: false, rodada,
     })).filter((v) => v.headline);
     if (!versoes.length) {
@@ -287,10 +311,12 @@ router.post('/criativos/:id/copy/aprovar', async (req, res) => {
     // Imagens de versões que saíram da seleção são descartadas; as que já têm imagem não geram de novo
     // (assim dá para voltar aqui e acrescentar um ângulo sem refazer o que estava aprovado).
     const imagens = (c.imagens || []).filter((i) => pedidas.includes(String(i.versao_id)));
-    const pendentes = aprovadas.filter((v) => !imagens.some((i) => i.versao_id === v.id));
+    // só pede foto para a versão cuja peça pede foto: composição só de texto e ícone vai direto para a arte
+    const temFotoDoUsuario = (c.contexto?.fotos || []).length > 0;
+    const pendentes = aprovadas.filter((v) => (v.slots || []).length > 0 && !temFotoDoUsuario && !imagens.some((i) => i.versao_id === v.id));
     await atualizar(c.id, {
       copy: { ...(c.copy || {}), versoes }, imagens,
-      estado: pendentes.length ? 'imagem_gerando' : 'imagem_pendente',
+      estado: pendentes.length ? 'imagem_gerando' : 'arte_pendente',
       erro: null, callback_token: pendentes.length ? token : null,
     });
     if (!pendentes.length) return res.json(apresentar(await buscarCriativo(c.id), urlPublica(req)));
@@ -336,7 +362,11 @@ router.post('/criativos/:id/imagens/concluir', async (req, res) => {
       patch.erro = `${versao.angulo}: ${String(b.erro || 'o n8n não devolveu imagens').slice(0, 200)}`;
     }
     // Só sai de "gerando" quando todas as copies aprovadas tiverem imagem (ou o tempo máximo estourar).
-    if (prontas >= aprovadas.length) { patch.estado = 'imagem_pendente'; patch.callback_token = null; }
+    if (prontas >= aprovadas.length) {
+      const precisaEscolher = aprovadas.some((v) => imagens.filter((i) => i.versao_id === v.id).length > 1);
+      patch.estado = precisaEscolher ? 'imagem_pendente' : 'arte_pendente';
+      patch.callback_token = null;
+    }
     await atualizar(c.id, patch);
     res.json({ ok: true });
   } catch (e) { console.error(e); res.status(500).json({ erro: e.message }); }
@@ -372,47 +402,56 @@ router.post('/criativos/:id/imagens/:arquivoId/escolher', async (req, res) => {
   } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
-// Montar as artes: uma peça por copy aprovada x formato pedido, no layout escolhido.
+// Montar as artes: renderiza a PEÇA que a IA montou (blocos) para cada copy aprovada, em cada formato pedido.
+// O cockpit só compõe: paleta e logo vêm da ficha do cliente, telefone e cidade entram no rodapé.
 router.post('/criativos/:id/artes', async (req, res) => {
   try {
     const c = await buscarCriativo(req.params.id);
     if (!c) return res.status(404).json({ erro: 'criativo não encontrado' });
-    const layout = LAYOUTS[req.body?.layout] ? req.body.layout : 'sobreposto';
     const aprovadas = (c.copy?.versoes || []).filter((v) => v.aprovada);
     if (!aprovadas.length) return res.status(409).json({ erro: 'aprove ao menos uma copy antes' });
+    const semPeca = aprovadas.filter((v) => !v.peca?.blocos?.length);
+    if (semPeca.length) return res.status(409).json({ erro: `a versão "${semPeca[0].angulo}" veio sem peça montada — gere as copies de novo` });
 
-    // cada versão aprovada precisa de uma imagem escolhida (com uma só opção, vale a única)
-    const pares = [];
-    for (const v of aprovadas) {
-      const dela = (c.imagens || []).filter((i) => i.versao_id === v.id);
-      const img = dela.find((i) => i.escolhida) || (dela.length === 1 ? dela[0] : null);
-      if (!img) return res.status(409).json({ erro: `escolha a imagem da versão "${v.angulo}"` });
-      pares.push({ versao: v, imagem: img });
-    }
     const cliente = await clienteDe(c.cliente_id);
+    const marca = await marcaDe(cliente);
     const pedido = c.contexto?.formato || 'ambos';
     const formatos = pedido === 'ambos' ? ['feed', 'stories'] : [pedido];
     await atualizar(c.id, { estado: 'arte_gerando', erro: null });
 
+    // imagens disponíveis: a foto que a pessoa enviou tem prioridade sobre a que a IA gerou
+    const fotosEnviadas = c.contexto?.fotos || [];
+    const dataUrl = async (arquivoId) => {
+      const { rows } = await pool.query('SELECT mime, dados FROM arquivos WHERE id = $1', [arquivoId]);
+      return rows.length ? `data:${rows[0].mime};base64,${rows[0].dados.toString('base64')}` : '';
+    };
+
     const pecas = [];
-    for (const { versao, imagem } of pares) {
-      const { rows } = await pool.query('SELECT mime, dados FROM arquivos WHERE id = $1', [imagem.arquivo_id]);
-      if (!rows.length) throw new Error(`a imagem da versão "${versao.angulo}" não está mais no banco`);
+    for (const v of aprovadas) {
+      // preenche o rodapé que a IA montou com o contato real do cliente
+      const blocos = v.peca.blocos.map((b) => (b.tipo === 'rodape' ? { ...b, ...marca.rodape } : b));
+      // cada slot da peça recebe a imagem escolhida da versão, ou a foto que a pessoa enviou
+      const imagens = {};
+      const slots = (v.slots || []).map((x) => x.slot).filter(Boolean);
+      if (slots.length) {
+        const daVersao = (c.imagens || []).filter((i) => i.versao_id === v.id);
+        const escolhida = daVersao.find((i) => i.escolhida) || daVersao[0] || null;
+        const fonte = escolhida ? escolhida.arquivo_id : (fotosEnviadas[0]?.arquivo_id || null);
+        if (fonte) { const url = await dataUrl(fonte); for (const slot of slots) imagens[slot] = url; }
+      }
       for (const formato of formatos) {
-        pecas.push({
-          chave: versao.id, formato, layout, imagem: rows[0].dados, mime: rows[0].mime,
-          headline: versao.headline, texto: versao.texto, cta: versao.cta,
-        });
+        pecas.push({ chave: v.id, spec: { formato, blocos }, imagens, marca, cliente: cliente.nome });
       }
     }
-    const feitas = await montarLote(pecas, { marca: cliente.nome });
+
+    const feitas = await montarPecas(pecas);
     const registros = [];
     for (const a of feitas) {
       const versao = aprovadas.find((v) => v.id === a.chave);
       const nome = `${cliente.nome} - ${c.titulo} - ${versao?.angulo || a.chave} - ${a.formato}.png`.replace(/[\\/:*?"<>|]/g, '-');
       const arq = await salvarArquivo(c.id, 'arte', nome, 'image/png', a.png);
       registros.push({
-        versao_id: a.chave, angulo: versao?.angulo || '', formato: a.formato, layout: a.layout,
+        versao_id: a.chave, angulo: versao?.angulo || '', formato: a.formato, escala: a.escala,
         arquivo_id: arq.id, token: arq.token, largura: FORMATOS[a.formato].largura, altura: FORMATOS[a.formato].altura,
         criado_em: new Date().toISOString(),
       });

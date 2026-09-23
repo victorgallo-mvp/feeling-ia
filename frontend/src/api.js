@@ -21,6 +21,12 @@ const comJson = (method, dados) => ({
 });
 export const criarCliente = (dados) => req('/api/clientes', comJson('POST', dados));
 export const atualizarCliente = (id, dados) => req(`/api/clientes/${id}`, comJson('PUT', dados));
+export function enviarLogo(id, arquivo) {
+  const form = new FormData();
+  form.append('arquivo', arquivo);
+  return req(`/api/clientes/${id}/logo`, { method: 'POST', body: form });
+}
+export const urlLogo = (c) => (c?.logo_arquivo_id ? `${API_URL}/api/arquivos/${c.logo_arquivo_id}/${c.logo_token}` : '');
 export const listarDocumentos = (id) => req(`/api/clientes/${id}/documentos`);
 export const listarAnexos = (id) => req(`/api/clientes/${id}/anexos`);
 export const excluirAnexo = (id, titulo) => req(`/api/clientes/${id}/anexos?titulo=${encodeURIComponent(titulo)}`, { method: 'DELETE' });
@@ -72,7 +78,7 @@ export const editarCopy = (id, versaoId, campos) => req(`/api/criativos/${id}/co
 export const aprovarCopies = (id, versoes) => req(`/api/criativos/${id}/copy/aprovar`, comJson('POST', { versoes }));
 export const refazerImagens = (id, versaoId, feedback) => req(`/api/criativos/${id}/imagens/refazer`, comJson('POST', { versao_id: versaoId, feedback }));
 export const escolherImagem = (id, arquivoId) => req(`/api/criativos/${id}/imagens/${arquivoId}/escolher`, comJson('POST', {}));
-export const montarArtes = (id, layout) => req(`/api/criativos/${id}/artes`, comJson('POST', { layout }));
+export const montarArtes = (id) => req(`/api/criativos/${id}/artes`, comJson('POST', {}));
 export const excluirCriativo = (id) => req(`/api/criativos/${id}`, { method: 'DELETE' });
 
 // Prospecção (diagnóstico de presença digital)

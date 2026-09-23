@@ -12,7 +12,7 @@ Verba mensal de mídia:
 Tom de voz:
 Observações:`;
 
-const VAZIO = { nome: '', setor: '', cidade: '', conta_id: '', perfil: '', instagram: '', site: '', google_ads_id: '', orientacoes: '', abrangencia: '', whatsapp_ativo: false, whatsapp_webhook: '' };
+const VAZIO = { nome: '', setor: '', cidade: '', conta_id: '', perfil: '', instagram: '', site: '', google_ads_id: '', orientacoes: '', abrangencia: '', whatsapp_ativo: false, whatsapp_webhook: '', telefone: '', cor_primaria: '', cor_destaque: '' };
 
 const EXEMPLO_ORIENTACOES = `Ex.: Foco deste mês é a campanha de Dia das Mães.
 Não citar o concorrente X nos documentos.
@@ -20,7 +20,7 @@ Tom mais formal; o cliente não gosta de gíria.
 Não falar de preço — o cliente prefere tratar no atendimento.`;
 
 // Formulário de criar/editar cliente. `aoSalvar(dados)` deve devolver uma Promise.
-export default function FormCliente({ inicial, rotuloSalvar, aoSalvar, aoCancelar }) {
+export default function FormCliente({ inicial, rotuloSalvar, aoSalvar, aoCancelar, aoEnviarLogo, logoUrl }) {
   const [dados, setDados] = useState(() => {
     const d = { ...VAZIO };
     for (const k of Object.keys(VAZIO)) d[k] = inicial?.[k] ?? VAZIO[k];
@@ -106,6 +106,31 @@ export default function FormCliente({ inicial, rotuloSalvar, aoSalvar, aoCancela
               <input {...campo('google_ads_id')} placeholder="123-456-7890" autoComplete="off" inputMode="numeric" />
             </div>
           </div>
+        </fieldset>
+        <fieldset className="form-grupo form-campo-largo">
+          <legend>Marca (usada nos criativos)</legend>
+          <p className="form-ajuda">Entra na peça: o logo no topo, as cores no fundo e nos destaques, o telefone e a cidade no rodapé. Sem isso o criativo sai com a paleta genérica e sem logo.</p>
+          <div className="form-grade form-grade-3">
+            <div className="form-campo">
+              <label htmlFor="campo-telefone">Telefone / WhatsApp</label>
+              <input {...campo('telefone')} placeholder="(37) 99999-0000" autoComplete="off" inputMode="tel" />
+            </div>
+            <div className="form-campo">
+              <label htmlFor="campo-cor_primaria">Cor principal <span className="form-opcional">(fundo)</span></label>
+              <input {...campo('cor_primaria')} placeholder="#12203a" autoComplete="off" spellCheck="false" />
+            </div>
+            <div className="form-campo">
+              <label htmlFor="campo-cor_destaque">Cor de destaque <span className="form-opcional">(títulos e botão)</span></label>
+              <input {...campo('cor_destaque')} placeholder="#d6a53c" autoComplete="off" spellCheck="false" />
+            </div>
+          </div>
+          {aoEnviarLogo && (
+            <div className="form-campo">
+              <label htmlFor="campo-logo">Logo <span className="form-opcional">(PNG com fundo transparente é o ideal; até 4 MB)</span></label>
+              <input id="campo-logo" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={(e) => e.target.files?.[0] && aoEnviarLogo(e.target.files[0])} />
+              {logoUrl && <img src={logoUrl} alt="logo do cliente" className="previa-logo" />}
+            </div>
+          )}
         </fieldset>
         <fieldset className="form-grupo form-campo-largo">
           <legend>WhatsApp com IA</legend>
