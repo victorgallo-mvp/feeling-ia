@@ -6,6 +6,8 @@ const ETAPA = {
   agendou: 'Agendou', comprou: 'Comprou', perdido: 'Perdido', esfriou: 'Esfriou',
 };
 const OPERACAO = { a_vista: 'à vista', financiamento: 'financiamento', consorcio: 'consórcio', nao_definido: '' };
+// Quem não é lead de venda não entra no funil nem na auditoria — só é contado.
+const TIPO_CONTATO = { pos_venda: 'de pós-venda', fornecedor: 'de fornecedor', transportadora: 'de transportadora', interno: 'interno', outro: 'não identificado' };
 const FUNIL = ['novo', 'em_conversa', 'qualificado', 'simulacao_enviada', 'agendou', 'comprou'];
 const PERIODOS = [['semana', 'Semana passada (seg–dom)'], ['7d', 'Últimos 7 dias'], ['mes', 'Mês passado'], ['30d', 'Últimos 30 dias']];
 
@@ -184,8 +186,9 @@ export default function Comercial({ clienteId, aoNovoDocumento }) {
   const a = dados.anuncio, o = dados.organico;
   const meta = c.meta?.[periodo === '30d' || periodo === 'mes' ? 'd30' : 'd7'];
   const filtrar = (ls) => (filtroEtapa === 'todas' ? ls : ls.filter((l) => (l.etapa || 'sem') === filtroEtapa));
-  const leadsAnuncio = filtrar(dados.leads.filter((l) => l.origem === 'anuncio'));
-  const leadsOrganico = filtrar(dados.leads.filter((l) => l.origem !== 'anuncio'));
+  const deVenda = dados.leads.filter((l) => !l.tipo_contato || l.tipo_contato === 'lead_comercial');
+  const leadsAnuncio = filtrar(deVenda.filter((l) => l.origem === 'anuncio'));
+  const leadsOrganico = filtrar(deVenda.filter((l) => l.origem !== 'anuncio'));
   const alertasAnuncio = dados.alertas.filter((x) => x.origem === 'anuncio');
   const alertasOrganico = dados.alertas.filter((x) => x.origem !== 'anuncio');
 
@@ -255,6 +258,13 @@ export default function Comercial({ clienteId, aoNovoDocumento }) {
       </div>
 
       <Auditoria a={dados.auditoria} />
+
+      {dados.nao_comerciais?.total > 0 && (
+        <p className="form-ajuda">
+          {dados.nao_comerciais.total} contato{dados.nao_comerciais.total > 1 ? 's' : ''} do período não {dados.nao_comerciais.total > 1 ? 'são' : 'é'} de venda e ficou fora do funil e da auditoria
+          {dados.nao_comerciais.por_tipo?.length > 0 && `: ${dados.nao_comerciais.por_tipo.map((t) => `${t.qtd} ${TIPO_CONTATO[t.valor] || t.valor}`).join(', ')}`}.
+        </p>
+      )}
 
       <div className="bloco-topo">
         <h4>Leads de anúncio ({leadsAnuncio.length})</h4>

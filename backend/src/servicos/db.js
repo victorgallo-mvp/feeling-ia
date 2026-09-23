@@ -97,6 +97,8 @@ async function migrar() {
     -- auditoria no padrão da casa (10 critérios do "Modelo de Auditoria de Atendimento via WhatsApp")
     ALTER TABLE leads_comercial ADD COLUMN IF NOT EXISTS criterios JSONB;
     ALTER TABLE leads_comercial ADD COLUMN IF NOT EXISTS falhas JSONB;
+    -- quem é o contato: só lead_comercial entra na auditoria de vendas (transportadora, pós-venda e fornecedor não são venda)
+    ALTER TABLE leads_comercial ADD COLUMN IF NOT EXISTS tipo_contato TEXT;
   `);
   // Criativos: contexto -> imagens (n8n) -> aprovação -> copy (n8n) -> escolha -> arte (cockpit, template HTML).
   // Arquivos (fotos, imagens, artes) ficam no Postgres: o volume do Railway não persiste.

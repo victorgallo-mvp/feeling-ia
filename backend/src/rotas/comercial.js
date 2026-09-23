@@ -153,8 +153,14 @@ router.get('/clientes/:id/comercial', async (req, res) => {
     );
     const { rows: [{ total_geral }] } = await pool.query('SELECT count(*)::int AS total_geral FROM leads_comercial WHERE cliente_id = $1', [cliente.id]);
 
-    const anuncio = leads.filter((l) => l.origem === 'anuncio');
-    const organico = leads.filter((l) => l.origem !== 'anuncio');
+    // Transportadora, pós-venda e fornecedor não são venda: ficam fora do funil e da auditoria, mas aparecem contados.
+    const ehComercial = (l) => !l.tipo_contato || l.tipo_contato === 'lead_comercial';
+    const comerciais = leads.filter(ehComercial);
+    const fora = leads.filter((l) => !ehComercial(l));
+    const nao_comerciais = { total: fora.length, por_tipo: contar(fora, 'tipo_contato') };
+
+    const anuncio = comerciais.filter((l) => l.origem === 'anuncio');
+    const organico = comerciais.filter((l) => l.origem !== 'anuncio');
 
     // Uma linha por anúncio: o que a Feeling é cobrada.
     const porAnuncio = new Map();
@@ -174,7 +180,7 @@ router.get('/clientes/:id/comercial', async (req, res) => {
         return { tipo: 'qualificado_sem_humano', origem: l.origem, contato: mascarar(l.contato), nome: l.nome, interesse: l.interesse };
       return null;
     };
-    const alertas = leads.map(alerta).filter(Boolean)
+    const alertas = comerciais.map(alerta).filter(Boolean)
       .sort((a, b) => ((a.origem === 'anuncio' ? 0 : 1) - (b.origem === 'anuncio' ? 0 : 1)) || ((b.horas || 0) - (a.horas || 0)))
       .slice(0, 25);
 
@@ -184,8 +190,9 @@ router.get('/clientes/:id/comercial', async (req, res) => {
       classificacao: { ...cliente.comercial, total_leads_tabela: total_geral },
       anuncio: { ...resumir(anuncio), interesses: contar(anuncio, 'interesse'), objecoes: contar(anuncio, 'objecao'), auditoria: auditar(anuncio) },
       organico: { ...resumir(organico), interesses: contar(organico, 'interesse'), objecoes: contar(organico, 'objecao') },
-      todos: resumir(leads),
-      auditoria: auditar(leads),
+      todos: resumir(comerciais),
+      auditoria: auditar(comerciais),
+      nao_comerciais,
       por_anuncio,
       alertas,
       leads: leads.map((l) => ({ ...l, contato: mascarar(l.contato), perfil: undefined })),
@@ -256,16 +263,24 @@ router.post('/clientes/:id/comercial/auditoria', async (req, res) => {
     );
     if (!leads.length) return res.status(409).json({ erro: 'nenhum lead classificado neste período — atualize as conversas antes' });
 
-    const anuncio = leads.filter((l) => l.origem === 'anuncio');
+    // A auditoria é de venda: transportadora, pós-venda e fornecedor saem da conta (mas o documento diz quantos foram).
+    const todosClassificados = leads;
+    const fora = leads.filter((l) => l.tipo_contato && l.tipo_contato !== 'lead_comercial');
+    const comerciais = leads.filter((l) => !l.tipo_contato || l.tipo_contato === 'lead_comercial');
+    if (!comerciais.length) return res.status(409).json({ erro: 'nenhum contato comercial neste período — os contatos encontrados são pós-venda, fornecedor ou transportadora' });
+
+    const anuncio = comerciais.filter((l) => l.origem === 'anuncio');
     const dados = {
-      total_leads: leads.length, de_anuncio: anuncio.length,
-      geral: resumir(leads), anuncio: resumir(anuncio),
-      auditoria: auditar(leads),
-      interesses: contar(leads, 'interesse'), objecoes: contar(leads, 'objecao'),
+      total_contatos: todosClassificados.length,
+      total_leads: comerciais.length, de_anuncio: anuncio.length,
+      nao_comerciais: { total: fora.length, por_tipo: contar(fora, 'tipo_contato'), observacao: 'contatos que não são de venda; ficam fora do funil e da auditoria' },
+      geral: resumir(comerciais), anuncio: resumir(anuncio),
+      auditoria: auditar(comerciais),
+      interesses: contar(comerciais, 'interesse'), objecoes: contar(comerciais, 'objecao'),
       tempo_ia_segundos: 'a IA responde em segundos; os tempos apurados medem a entrada do atendente humano',
     };
     // amostras: melhores e piores notas, sem telefone nem nome
-    const ordenadas = leads.filter((l) => l.nota_atendimento != null).sort((a, b) => a.nota_atendimento - b.nota_atendimento);
+    const ordenadas = comerciais.filter((l) => l.nota_atendimento != null).sort((a, b) => a.nota_atendimento - b.nota_atendimento);
     const amostra = (l) => ({
       origem: l.origem, etapa: l.etapa, interesse: l.interesse, nota: l.nota_atendimento, motivo: l.motivo_nota,
       primeira_resposta_min: l.primeira_resposta_humana_seg == null ? null : Math.round(l.primeira_resposta_humana_seg / 60),
