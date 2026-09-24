@@ -35,7 +35,7 @@ const normalizarSite = (v) => { if (!v) return null; const u = /^https?:\/\//i.t
 router.get('/prospects', async (req, res) => {
   try {
     await pool.query(`UPDATE prospects SET estado = 'erro', erro = 'o n8n não respondeu em ${TEMPO_MAXIMO_MIN} minutos'
-      WHERE estado IN ('coletando') AND atualizado_em < now() - interval '${TEMPO_MAXIMO_MIN} minutes'`);
+      WHERE estado IN ('coletando', 'localizando') AND atualizado_em < now() - interval '${TEMPO_MAXIMO_MIN} minutes'`);
     const { rows } = await pool.query(`SELECT ${CAMPOS} FROM prospects ORDER BY atualizado_em DESC LIMIT 200`);
     res.json(rows.map((p) => ({
       ...p,
@@ -91,20 +91,43 @@ router.delete('/prospects/:id', async (req, res) => {
   } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
-// Localizar: o n8n procura a ficha do Google, o @ e o site pelo nome + cidade e devolve candidatos (síncrono, ~30-60 s).
+// Localizar: o n8n procura a ficha do Google, o @ e o site pelo nome + cidade (assíncrono: ~1 a 3 min).
+// Era síncrono, mas o fluxo passou de 2 minutos e a resposta era cortada pelo proxy na frente do n8n —
+// o cockpit mostrava erro com o trabalho concluído do outro lado.
 router.post('/prospects/:id/localizar', async (req, res) => {
   const url = process.env.N8N_WEBHOOK_PROSPECT_LOCALIZAR;
   if (!url) return res.status(503).json({ erro: 'N8N_WEBHOOK_PROSPECT_LOCALIZAR não configurado' });
   try {
     const p = await buscar(req.params.id);
     if (!p) return res.status(404).json({ erro: 'prospect não encontrado' });
-    // Sem cidade a busca traz empresa de mesmo nome de outro estado e não há como separar — era a causa dos candidatos errados.
+    // Sem cidade a busca traz empresa de mesmo nome de outro estado e não há como separar.
     if (!texto(p.cidade, 120)) return res.status(400).json({ erro: 'informe a cidade antes de localizar: sem ela a busca traz empresas de mesmo nome em outros estados' });
-    await atualizar(p.id, { estado: 'localizando', erro: null });
-    const resp = await axios.post(url, { prospect_id: p.id, nome: p.nome, cidade: p.cidade, setor: p.setor, site: p.site, instagram: p.instagram },
-      { timeout: 170000, headers: { 'Content-Type': 'application/json' } });
-    const d = resp.data || {};
-    if (d.erro) throw new Error(d.erro);
+    const token = crypto.randomBytes(24).toString('hex');
+    await atualizar(p.id, { estado: 'localizando', erro: null, callback_token: token });
+    const resp = await axios.post(url, {
+      prospect_id: p.id, nome: p.nome, cidade: p.cidade, setor: p.setor, site: p.site, instagram: p.instagram,
+      callback_url: `${urlPublica(req)}/api/prospects/${p.id}/localizar/concluir`, callback_token: token,
+    }, { timeout: 30000, headers: { 'Content-Type': 'application/json' } });
+    if (!resp.data?.aceito) throw new Error('o n8n não aceitou o pedido de localização');
+    res.status(202).json(publico(await buscar(p.id)));
+  } catch (e) {
+    await atualizar(req.params.id, { estado: 'erro', erro: `localizar: ${e.message}` }).catch(() => {});
+    res.status(502).json({ erro: e.message });
+  }
+});
+
+// Callback da localização: candidatos com origem, motivo e a decisão da conferência.
+router.post('/prospects/:id/localizar/concluir', async (req, res) => {
+  try {
+    const p = await buscar(req.params.id);
+    if (!p) return res.status(404).json({ erro: 'prospect não encontrado' });
+    const token = req.get('x-cockpit-token') || req.body?.callback_token;
+    if (!p.callback_token || token !== p.callback_token) return res.status(403).json({ erro: 'token inválido' });
+    const d = req.body || {};
+    if (d.erro) {
+      await atualizar(p.id, { estado: 'erro', erro: `localizar: ${String(d.erro).slice(0, 300)}`, callback_token: null });
+      return res.json({ ok: true });
+    }
     const candidatos = {
       gmn: d.gmn || [], instagram: d.instagram || [], sites: d.sites || [],
       avisos: d.avisos || [], descartados: d.descartados || [], decisao: d.decisao || {},
@@ -113,7 +136,7 @@ router.post('/prospects/:id/localizar', async (req, res) => {
     // Confirma sozinho só com evidência dura ("alta": veio do site oficial, telefone confere, bio cita a cidade, ou foi informado).
     // Parecença de nome não confirma nada — @satransportes_ e @s.a_transportes__ empatam em qualquer métrica de texto.
     const comEvidencia = (lista) => lista.find((x) => (x.escolhido || x.informado) && x.confianca_texto === 'alta') || null;
-    const patch = { candidatos, estado: 'localizado' };
+    const patch = { candidatos, estado: 'localizado', erro: null, callback_token: null };
     const ficha = comEvidencia(candidatos.gmn);
     const insta = comEvidencia(candidatos.instagram);
     const site = comEvidencia(candidatos.sites);
@@ -127,14 +150,13 @@ router.post('/prospects/:id/localizar', async (req, res) => {
       if (!candidatos.gmn.length && !candidatos.instagram.length) patch.estado = 'erro';
     }
     await atualizar(p.id, patch);
-    res.json(publico(await buscar(p.id)));
+    res.json({ ok: true });
   } catch (e) {
-    await atualizar(req.params.id, { estado: 'erro', erro: `localizar: ${e.message}` }).catch(() => {});
-    res.status(502).json({ erro: e.message });
+    console.error(e);
+    res.status(500).json({ erro: e.message });
   }
 });
 
-// Confirmar/ajustar o que foi localizado. { gmn: {...}|null, instagram: '@'|null, site: 'url'|null, sem_gmn/sem_instagram/sem_site: true }
 router.post('/prospects/:id/confirmar', async (req, res) => {
   const b = req.body || {};
   try {

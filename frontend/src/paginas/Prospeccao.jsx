@@ -238,7 +238,7 @@ export function Prospect() {
 
   const carregar = () => buscarProspect(id).then((x) => { setP(x); setErro(''); }).catch((e) => setErro(e.message));
   useEffect(() => { setP(null); carregar(); listarTipos().then(setLigados).catch(() => {}); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
-  const emAndamento = p && (p.estado === 'coletando' || (p.documentos || []).some((d) => d.estado === 'gerando'));
+  const emAndamento = p && (p.estado === 'coletando' || p.estado === 'localizando' || (p.documentos || []).some((d) => d.estado === 'gerando'));
   useEffect(() => { clearInterval(timer.current); if (emAndamento) timer.current = setInterval(carregar, 6000); return () => clearInterval(timer.current); }, [emAndamento]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const agir = async (fn, depois) => { setOcupado(true); setErro(''); try { const r = await fn(); if (depois) depois(r); else await carregar(); } catch (e) { setErro(e.message); await carregar(); } finally { setOcupado(false); } };
@@ -291,6 +291,7 @@ export function Prospect() {
           )}
         </div>
         {!p.cidade && <p className="aviso">Informe a cidade em "editar" antes de localizar: sem ela a busca traz empresas de mesmo nome em outros estados.</p>}
+        {p.estado === 'localizando' && <p className="aviso" role="status"><span className="girando girando-mini" aria-hidden="true" /> Procurando a ficha do Google, o perfil e o site — 1 a 3 minutos. Pode sair desta tela; o resultado fica salvo.</p>}
         {p.estado === 'coletando' && <p className="aviso" role="status"><span className="girando girando-mini" aria-hidden="true" /> Coletando ficha do Google, Instagram e site — 1 a 3 minutos.</p>}
       </section>
 

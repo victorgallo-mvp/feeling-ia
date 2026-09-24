@@ -356,13 +356,16 @@ router.post('/criativos/:id/imagens/concluir', async (req, res) => {
     }
     const imagens = [...(c.imagens || []), ...novas];
     const aprovadas = versoes.filter((v) => v.aprovada);
-    const prontas = aprovadas.filter((v) => imagens.some((i) => i.versao_id === v.id)).length;
+    // Só conta quem PEDIU foto: peça montada só com texto e ícone nunca receberia imagem, e o criativo
+    // ficava preso em "imagem_gerando" até o varredor de 10 min marcar erro.
+    const esperadas = aprovadas.filter((v) => (v.slots || []).length > 0);
+    const prontas = esperadas.filter((v) => imagens.some((i) => i.versao_id === v.id)).length;
     const patch = { imagens };
     if (!novas.length && !imagens.some((i) => i.versao_id === versao.id)) {
       patch.erro = `${versao.angulo}: ${String(b.erro || 'o n8n não devolveu imagens').slice(0, 200)}`;
     }
     // Só sai de "gerando" quando todas as copies aprovadas tiverem imagem (ou o tempo máximo estourar).
-    if (prontas >= aprovadas.length) {
+    if (prontas >= esperadas.length) {
       const precisaEscolher = aprovadas.some((v) => imagens.filter((i) => i.versao_id === v.id).length > 1);
       patch.estado = precisaEscolher ? 'imagem_pendente' : 'arte_pendente';
       patch.callback_token = null;
