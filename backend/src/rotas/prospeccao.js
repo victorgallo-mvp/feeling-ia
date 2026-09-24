@@ -108,6 +108,7 @@ router.post('/prospects/:id/localizar', async (req, res) => {
     const candidatos = {
       gmn: d.gmn || [], instagram: d.instagram || [], sites: d.sites || [],
       avisos: d.avisos || [], descartados: d.descartados || [], decisao: d.decisao || {},
+      falhas_de_coleta: d.falhas_de_coleta || [],
     };
     // Confirma sozinho só com evidência dura ("alta": veio do site oficial, telefone confere, bio cita a cidade, ou foi informado).
     // Parecença de nome não confirma nada — @satransportes_ e @s.a_transportes__ empatam em qualquer métrica de texto.
@@ -119,6 +120,12 @@ router.post('/prospects/:id/localizar', async (req, res) => {
     if (!p.gmn && ficha) patch.gmn = ficha;
     if (!p.instagram && insta) patch.instagram = insta.username;
     if (!p.site && site) patch.site = site.url;
+    // Coletor fora do ar não é ausência: sem nada coletado a rodada vira erro, para a pessoa tentar de novo
+    // em vez de registrar "não tem ficha" e "não tem perfil" como se fosse diagnóstico.
+    if (candidatos.falhas_de_coleta.length) {
+      patch.erro = `falha de coleta em ${candidatos.falhas_de_coleta.join(' e ')} — localize de novo; isso não significa que o negócio não tem`;
+      if (!candidatos.gmn.length && !candidatos.instagram.length) patch.estado = 'erro';
+    }
     await atualizar(p.id, patch);
     res.json(publico(await buscar(p.id)));
   } catch (e) {

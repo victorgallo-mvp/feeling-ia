@@ -99,6 +99,12 @@ function Candidatos({ p, aoConfirmar, ocupado }) {
         {ocultos > 0 && <button type="button" className="link" onClick={() => setVerTudo((v) => !v)}>{verTudo ? 'esconder os sem evidência' : `ver todos (${ocultos} sem evidência)`}</button>}
       </div>
       <p className="form-ajuda">A ficha vem do Google; o Instagram e o site vêm do que está linkado no site oficial ou de perfis conferidos direto na fonte. Cada opção mostra <strong>por que</strong> é candidata. Se nenhuma for o negócio, escolha "não tem" — a ausência entra no diagnóstico.</p>
+      {(c.falhas_de_coleta || []).length > 0 && (
+        <p className="aviso aviso-erro">
+          A coleta de {c.falhas_de_coleta.join(' e ')} falhou nesta rodada — <strong>isso não quer dizer que o negócio não tem</strong>.
+          Clique em "Localizar de novo" antes de marcar qualquer "não tem".
+        </p>
+      )}
       {(c.avisos || []).length > 0 && (
         <ul className="lista-simples">{c.avisos.map((a, i) => <li key={i} className="doc-data">{a}</li>)}</ul>
       )}
