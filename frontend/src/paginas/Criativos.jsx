@@ -17,10 +17,12 @@ const resumoPeca = (peca) => {
   return [...new Set(nomes)].join(' · ');
 };
 const GIRANDO = ['copy_gerando', 'imagem_gerando', 'arte_gerando'];
+// o prompt que gerou as imagens desta versão (a escolhida manda; se não escolheu, a primeira)
+const promptDe = (imgs) => (imgs.find((i) => i.escolhida) || imgs[0])?.prompt || '';
 const fmtData = (iso) => new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 
 function NovoCriativo({ clienteId, ligado, aoCriar }) {
-  const vazio = { titulo: '', objetivo: 'vendas', produto: '', oferta: '', publico: '', formato: 'ambos', estilo: '', referencias: '' };
+  const vazio = { titulo: '', objetivo: 'vendas', produto: '', oferta: '', publico: '', formato: 'ambos', instrucoes: '' };
   const [c, setC] = useState(vazio);
   const [fotos, setFotos] = useState([]);
   const [ocupado, setOcupado] = useState(false);
@@ -48,10 +50,13 @@ function NovoCriativo({ clienteId, ligado, aoCriar }) {
         <div className="form-campo"><label htmlFor="cr-publico">Público <span className="form-opcional">(opcional)</span></label><input {...campo('publico')} placeholder="ex.: Homens 25–45, donos de moto trail" /></div>
         <div className="form-campo"><label htmlFor="cr-formato">Formato</label><select {...campo('formato')}><option value="ambos">Feed + Stories</option><option value="feed">Só Feed (1080×1080)</option><option value="stories">Só Stories (1080×1920)</option></select></div>
         <div className="form-campo"><label htmlFor="cr-titulo">Nome do criativo <span className="form-opcional">(opcional)</span></label><input {...campo('titulo')} placeholder="ex.: Escapamento — setembro" /></div>
-        <div className="form-campo form-campo-largo"><label htmlFor="cr-estilo">Direção visual <span className="form-opcional">(opcional)</span></label><input {...campo('estilo')} placeholder="ex.: oficina limpa, luz dramática, peça em destaque; cores da marca" /></div>
-        <div className="form-campo form-campo-largo"><label htmlFor="cr-referencias">Referências <span className="form-opcional">(opcional)</span></label><input {...campo('referencias')} placeholder="links de anúncios/posts de referência ou descrição do que gostou" /></div>
         <div className="form-campo form-campo-largo">
-          <label htmlFor="cr-fotos">Fotos do produto <span className="form-opcional">(até 3, opcional — a IA descreve e reproduz)</span></label>
+          <label htmlFor="cr-instrucoes">O que você quer neste criativo <span className="form-opcional">(opcional, mas é o campo que mais muda o resultado)</span></label>
+          <textarea {...campo('instrucoes')} rows={4} maxLength={4000} placeholder="Escreva com suas palavras, como escreveria no ChatGPT. ex.: fundo vermelho da marca, produto de lado ocupando metade, preço grande no canto superior, sem pessoas, tipografia grossa. Vale colar referência de anúncio que funcionou." />
+          <p className="form-ajuda">Isto entra literal no prompt da imagem e ganha do que a IA decidir. Depois de gerar, você ainda vê e edita o prompt completo de cada versão.</p>
+        </div>
+        <div className="form-campo form-campo-largo">
+          <label htmlFor="cr-fotos">Fotos do produto <span className="form-opcional">(até 3, opcional — a foto entra no gerador, o produto real aparece)</span></label>
           <input id="cr-fotos" type="file" accept="image/png,image/jpeg,image/webp" multiple disabled={ocupado} onChange={(e) => setFotos([...(e.target.files || [])].slice(0, 3))} />
           {fotos.length > 0 && <p className="doc-data">{fotos.map((f) => f.name).join(' · ')}</p>}
         </div>
@@ -120,6 +125,7 @@ function Cartao({ c, aoAtualizar, aoExcluir }) {
   const [marcadas, setMarcadas] = useState([]);
   const [feedback, setFeedback] = useState('');
   const [feedbackImg, setFeedbackImg] = useState({});
+  const [promptImg, setPromptImg] = useState({});
   const [ocupado, setOcupado] = useState(false);
   const [erro, setErro] = useState('');
 
@@ -196,6 +202,7 @@ function Cartao({ c, aoAtualizar, aoExcluir }) {
                 <figure key={i.arquivo_id} className={`imagem-opcao${i.escolhida ? ' imagem-aprovada' : ''}`}>
                   <a href={i.url} target="_blank" rel="noreferrer"><img src={i.url} alt="" loading="lazy" /></a>
                   <figcaption>
+                    {i.direcao && <span className="doc-data">{i.direcao}</span>}
                     {i.escolhida ? <span className="etiqueta etiqueta-ok">escolhida</span>
                       : <button type="button" className="botao botao-secundario" disabled={ocupado || girando} onClick={() => agir(() => escolherImagem(c.id, i.arquivo_id))}>Usar esta</button>}
                   </figcaption>
@@ -203,10 +210,26 @@ function Cartao({ c, aoAtualizar, aoExcluir }) {
               ))}
             </div>
             {!girando && (
-              <div className="linha-feedback">
-                <input value={feedbackImg[v.id] || ''} onChange={(e) => setFeedbackImg((f) => ({ ...f, [v.id]: e.target.value }))} placeholder="o que mudar na imagem? ex.: produto maior, fundo claro, sem pessoas" disabled={ocupado} />
-                <button type="button" className="botao botao-secundario" disabled={ocupado} onClick={() => agir(async () => { const r = await refazerImagens(c.id, v.id, feedbackImg[v.id] || ''); setFeedbackImg((f) => ({ ...f, [v.id]: '' })); return r; })}>Gerar outras</button>
-              </div>
+              <>
+                <div className="linha-feedback">
+                  <input value={feedbackImg[v.id] || ''} onChange={(e) => setFeedbackImg((f) => ({ ...f, [v.id]: e.target.value }))} placeholder="o que mudar na imagem? ex.: produto maior, fundo claro, sem pessoas" disabled={ocupado} />
+                  <button type="button" className="botao botao-secundario" disabled={ocupado} onClick={() => agir(async () => { const r = await refazerImagens(c.id, v.id, feedbackImg[v.id] || ''); setFeedbackImg((f) => ({ ...f, [v.id]: '' })); return r; })}>Gerar outras</button>
+                </div>
+                {/* O prompt é o produto: fica à vista, editável, e vai literal para o gerador. */}
+                <details className="copy-legenda">
+                  <summary>prompt usado — editar e gerar de novo</summary>
+                  <textarea rows={8} className="campo-prompt" disabled={ocupado}
+                    value={promptImg[v.id] ?? promptDe(imgs)}
+                    onChange={(e) => setPromptImg((p) => ({ ...p, [v.id]: e.target.value }))} />
+                  <div className="acoes">
+                    <button type="button" className="botao botao-secundario" disabled={ocupado || !(promptImg[v.id] ?? promptDe(imgs)).trim()}
+                      onClick={() => agir(() => refazerImagens(c.id, v.id, '', promptImg[v.id] ?? promptDe(imgs)))}>Gerar com este prompt</button>
+                    {promptImg[v.id] !== undefined && promptImg[v.id] !== promptDe(imgs) &&
+                      <button type="button" className="link" disabled={ocupado} onClick={() => setPromptImg((p) => { const { [v.id]: _, ...resto } = p; return resto; })}>voltar ao original</button>}
+                  </div>
+                  <p className="form-ajuda">Escreveu você? Vai literal para o gerador, sem a IA reescrever. As {imgs.length} imagens saem deste mesmo prompt.</p>
+                </details>
+              </>
             )}
           </div>
         );

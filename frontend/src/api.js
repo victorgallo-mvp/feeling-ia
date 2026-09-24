@@ -76,7 +76,8 @@ export function criarCriativo(clienteId, campos, fotos = []) {
 export const refazerCopy = (id, feedback) => req(`/api/criativos/${id}/copy/refazer`, comJson('POST', { feedback }));
 export const editarCopy = (id, versaoId, campos) => req(`/api/criativos/${id}/copy/${versaoId}`, comJson('PUT', campos));
 export const aprovarCopies = (id, versoes) => req(`/api/criativos/${id}/copy/aprovar`, comJson('POST', { versoes }));
-export const refazerImagens = (id, versaoId, feedback) => req(`/api/criativos/${id}/imagens/refazer`, comJson('POST', { versao_id: versaoId, feedback }));
+// feedback = a IA reescreve o prompt; prompt = vai literal para o gerador, sem a IA no meio
+export const refazerImagens = (id, versaoId, feedback, prompt = '') => req(`/api/criativos/${id}/imagens/refazer`, comJson('POST', { versao_id: versaoId, feedback, prompt }));
 export const escolherImagem = (id, arquivoId) => req(`/api/criativos/${id}/imagens/${arquivoId}/escolher`, comJson('POST', {}));
 export const montarArtes = (id) => req(`/api/criativos/${id}/artes`, comJson('POST', {}));
 export const excluirCriativo = (id) => req(`/api/criativos/${id}`, { method: 'DELETE' });

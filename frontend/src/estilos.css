@@ -312,6 +312,13 @@ code {
 .copy-cta { color: #2f6f6a; font-weight: 700; margin: 6px 0; }
 .copy-legenda summary { cursor: pointer; font-size: 13px; color: var(--texto-suave); }
 .copy-legenda p { margin-top: 6px; white-space: pre-wrap; font-size: 13px; }
+/* o prompt da imagem fica à vista e editável: é por aqui que a pessoa manda na arte */
+.campo-prompt {
+  width: 100%; margin-top: 8px; padding: 9px 12px; resize: vertical; line-height: 1.5;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; color: var(--texto);
+  border: 1px solid var(--linha); border-radius: 6px; background: var(--papel);
+}
+.campo-prompt:focus-visible { outline: 2px solid var(--petroleo); outline-offset: 1px; border-color: transparent; }
 .copy-versao .doc-data { margin-top: 8px; }
 .copy-escolhida { border-color: #2f6f6a; background: var(--fundo); }
 .copy-aprovada { border-color: #2f6f6a; }

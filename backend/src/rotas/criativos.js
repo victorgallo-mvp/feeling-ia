@@ -1,7 +1,9 @@
 // src/rotas/criativos.js
-// Criativos: contexto -> a IA lê o material do cliente e MONTA 3 peças (copy + composição de blocos) -> a pessoa
-// edita e aprova as que quiser -> foto só quando a composição pede -> render da peça (cockpit, motor de blocos).
-// Não existe modelo por caso: existe catálogo de blocos, e a IA escolhe os do caso. Marca e contato vêm da ficha.
+// Criativos: contexto -> a IA lê o material do cliente e escreve 3 copies -> a pessoa edita e aprova as que
+// quiser -> cada copy aprovada vira imagens de anúncio COM o texto dentro (é isso que performa em tráfego pago).
+// O prompt de imagem recebe o material inteiro do cliente, em português, sem resumo; a foto enviada entra como
+// imagem de entrada do gerador. O `peca.js` (motor de blocos) continua disponível como caminho determinístico,
+// para quando o texto tiver de sair exato (preço, telefone) ou o gerador errar a grafia.
 const crypto = require('crypto');
 const express = require('express');
 const multer = require('multer');
@@ -136,15 +138,21 @@ async function pedirCopy(req, criativo, cliente, feedback = '') {
 }
 
 // Dispara a geração de imagens de UMA copy aprovada (uma chamada por versão; cada uma chama o callback).
-async function pedirImagensDaVersao(base, criativo, cliente, versao, { feedback = '' } = {}) {
+// O prompt de imagem recebe o MESMO material que a copy recebe: o briefing inteiro, não um resumo dele.
+// `prompt_manual`, quando vem, vai direto para o gerador — sem a IA reescrever no meio.
+async function pedirImagensDaVersao(base, criativo, cliente, versao, { feedback = '', promptManual = '' } = {}) {
   const url = process.env.N8N_WEBHOOK_CRIATIVO_IMAGEM;
   if (!url) throw new Error('N8N_WEBHOOK_CRIATIVO_IMAGEM não configurado');
   const fotos = (criativo.contexto?.fotos || []).map((f) => `${base}/api/arquivos/${f.arquivo_id}/${f.token}`);
   const { fotos: _f, ...contexto } = criativo.contexto || {};
+  const material = await materialDoCliente(cliente.id);
   const resp = await axios.post(url, {
     criativo_id: criativo.id, versao_id: versao.id, cliente_id: cliente.id, cliente_nome: cliente.nome,
     perfil: cliente.perfil || '', orientacoes: cliente.orientacoes || '',
-    contexto, fotos, quantidade: IMAGENS_POR_COPY, feedback,
+    cidade: cliente.cidade || '', telefone: cliente.telefone || '',
+    cor_primaria: cliente.cor_primaria || '', cor_destaque: cliente.cor_destaque || '',
+    contexto, material, instrucoes: contexto.instrucoes || '', fotos,
+    quantidade: IMAGENS_POR_COPY, feedback, prompt_manual: promptManual,
     copy: { angulo: versao.angulo, headline: versao.headline, texto: versao.texto, cta: versao.cta, direcao_imagem: versao.direcao_imagem },
     callback_url: `${base}/api/criativos/${criativo.id}/imagens/concluir`, callback_token: criativo.callback_token,
   }, { timeout: 30000, headers: { 'Content-Type': 'application/json' } });
@@ -162,7 +170,9 @@ router.post('/clientes/:id/criativos', (req, res) => {
       const contexto = {
         objetivo: OBJETIVOS.includes(b.objetivo) ? b.objetivo : 'vendas',
         produto: texto(b.produto, 200), oferta: texto(b.oferta, 200), publico: texto(b.publico, 200),
-        formato: FORMATOS_PEDIDO.includes(b.formato) ? b.formato : 'ambos', estilo: texto(b.estilo, 400), referencias: texto(b.referencias, 600),
+        formato: FORMATOS_PEDIDO.includes(b.formato) ? b.formato : 'ambos',
+        // o que VOCÊ quer neste criativo, com suas palavras: entra literal no prompt e ganha do que a IA decidiu
+        instrucoes: texto(b.instrucoes, 4000) || [texto(b.estilo, 400), texto(b.referencias, 600)].filter(Boolean).join('\n'),
         fotos: [],
       };
       if (!contexto.produto) return res.status(400).json({ erro: 'informe o produto ou serviço do criativo' });
@@ -311,9 +321,10 @@ router.post('/criativos/:id/copy/aprovar', async (req, res) => {
     // Imagens de versões que saíram da seleção são descartadas; as que já têm imagem não geram de novo
     // (assim dá para voltar aqui e acrescentar um ângulo sem refazer o que estava aprovado).
     const imagens = (c.imagens || []).filter((i) => pedidas.includes(String(i.versao_id)));
-    // só pede foto para a versão cuja peça pede foto: composição só de texto e ícone vai direto para a arte
-    const temFotoDoUsuario = (c.contexto?.fotos || []).length > 0;
-    const pendentes = aprovadas.filter((v) => (v.slots || []).length > 0 && !temFotoDoUsuario && !imagens.some((i) => i.versao_id === v.id));
+    // Toda copy aprovada gera imagem. A imagem gerada já é o anúncio (texto faz parte dela), então não
+    // depende mais de a peça ter pedido foto. A foto enviada também não pula a geração: ela entra como
+    // imagem de ENTRADA do gerador, que monta o anúncio em volta do produto real em vez de inventar um parecido.
+    const pendentes = aprovadas.filter((v) => !imagens.some((i) => i.versao_id === v.id));
     await atualizar(c.id, {
       copy: { ...(c.copy || {}), versoes }, imagens,
       estado: pendentes.length ? 'imagem_gerando' : 'arte_pendente',
@@ -352,13 +363,18 @@ router.post('/criativos/:id/imagens/concluir', async (req, res) => {
       const dados = Buffer.from(String(img.base64).replace(/^data:[^,]+,/, ''), 'base64');
       if (dados.length < 1000) continue;
       const a = await salvarArquivo(c.id, 'imagem', `${versao.id}-${novas.length + 1}.png`, img.mime || 'image/png', dados);
-      novas.push({ versao_id: versao.id, arquivo_id: a.id, token: a.token, prompt: img.prompt || b.prompt || '', escolhida: false, rodada: c.rodada || 1, criado_em: new Date().toISOString() });
+      novas.push({
+        versao_id: versao.id, arquivo_id: a.id, token: a.token,
+        // o prompt de cada imagem é o que a tela mostra e deixa editar; a direção é o nome da ideia visual
+        prompt: img.prompt || b.prompt || '', direcao: texto(img.direcao, 80),
+        escolhida: false, rodada: c.rodada || 1, criado_em: new Date().toISOString(),
+      });
     }
     const imagens = [...(c.imagens || []), ...novas];
     const aprovadas = versoes.filter((v) => v.aprovada);
-    // Só conta quem PEDIU foto: peça montada só com texto e ícone nunca receberia imagem, e o criativo
-    // ficava preso em "imagem_gerando" até o varredor de 10 min marcar erro.
-    const esperadas = aprovadas.filter((v) => (v.slots || []).length > 0);
+    // Toda copy aprovada espera imagem (a imagem gerada é o anúncio). Só sai de "gerando" quando todas
+    // tiverem chegado — ou quando o varredor de 10 min marcar erro.
+    const esperadas = aprovadas;
     const prontas = esperadas.filter((v) => imagens.some((i) => i.versao_id === v.id)).length;
     const patch = { imagens };
     if (!novas.length && !imagens.some((i) => i.versao_id === versao.id)) {
@@ -375,7 +391,8 @@ router.post('/criativos/:id/imagens/concluir', async (req, res) => {
   } catch (e) { console.error(e); res.status(500).json({ erro: e.message }); }
 });
 
-// Refazer as imagens de uma versão (com feedback).
+// Refazer as imagens de uma versão: com feedback (a IA reescreve o prompt) OU com `prompt` pronto,
+// que vai literal para o gerador — é o "escrevi eu mesmo, gera assim".
 router.post('/criativos/:id/imagens/refazer', async (req, res) => {
   try {
     const c = await buscarCriativo(req.params.id);
@@ -387,7 +404,9 @@ router.post('/criativos/:id/imagens/refazer', async (req, res) => {
     const token = crypto.randomBytes(16).toString('hex');
     const imagens = (c.imagens || []).filter((i) => i.versao_id !== versao.id);
     await atualizar(c.id, { imagens, estado: 'imagem_gerando', erro: null, callback_token: token });
-    await pedirImagensDaVersao(urlPublica(req), await buscarCriativo(c.id), cliente, versao, { feedback: texto(req.body?.feedback, 600) });
+    await pedirImagensDaVersao(urlPublica(req), await buscarCriativo(c.id), cliente, versao, {
+      feedback: texto(req.body?.feedback, 600), promptManual: texto(req.body?.prompt, 8000),
+    });
     res.status(202).json(apresentar(await buscarCriativo(c.id), urlPublica(req)));
   } catch (e) { console.error(e); await atualizar(req.params.id, { estado: 'erro', erro: e.message }).catch(() => {}); res.status(502).json({ erro: e.message }); }
 });
