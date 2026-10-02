@@ -73,10 +73,17 @@ router.put('/prospects/:id', async (req, res) => {
   try {
     const p = await buscar(req.params.id);
     if (!p) return res.status(404).json({ erro: 'prospect não encontrado' });
+    // Só mexe no campo que veio. O formulário de edição não manda `gmn`, e antes disso qualquer
+    // "Salvar" apagava a ficha do Google já confirmada — levando junto o botão de coletar, que depende
+    // dela, e fazendo a coleta seguinte pontuar Google como ausente.
+    const veio = (k) => Object.prototype.hasOwnProperty.call(b, k);
     await atualizar(p.id, {
-      nome: texto(b.nome, 120) || p.nome, cidade: texto(b.cidade, 120), setor: texto(b.setor, 120),
-      site: normalizarSite(b.site), instagram: normalizarHandle(b.instagram),
-      gmn: b.gmn && typeof b.gmn === 'object' ? b.gmn : null,
+      nome: texto(b.nome, 120) || p.nome,
+      cidade: veio('cidade') ? texto(b.cidade, 120) : p.cidade,
+      setor: veio('setor') ? texto(b.setor, 120) : p.setor,
+      site: veio('site') ? normalizarSite(b.site) : p.site,
+      instagram: veio('instagram') ? normalizarHandle(b.instagram) : p.instagram,
+      gmn: veio('gmn') ? (b.gmn && typeof b.gmn === 'object' ? b.gmn : null) : p.gmn,
     });
     res.json(publico(await buscar(p.id)));
   } catch (e) { res.status(500).json({ erro: e.message }); }

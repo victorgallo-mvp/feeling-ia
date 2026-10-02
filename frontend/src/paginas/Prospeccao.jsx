@@ -295,8 +295,14 @@ export function Prospect() {
         {p.estado === 'coletando' && <p className="aviso" role="status"><span className="girando girando-mini" aria-hidden="true" /> Coletando ficha do Google, Instagram e site — 1 a 3 minutos.</p>}
       </section>
 
-      {p.candidatos && !d && p.estado !== 'coletando' && (
-        <section className="bloco"><Candidatos key={p.atualizado_em} p={p} ocupado={ocupado} aoConfirmar={(dados) => agir(async () => { await confirmarProspect(p.id, dados); return coletarProspect(p.id); })} /></section>
+      {/* Também aparece depois de pronto: "Localizar de novo" num prospect que já tem diagnóstico achava o
+          site novo e não tinha onde confirmar, então a coleta seguinte repetia os dados velhos. Estado
+          'localizado' com diagnóstico na mão = localizou de novo e ainda não coletou em cima do que achou. */}
+      {p.candidatos && p.estado !== 'coletando' && (!d || p.estado === 'localizado') && (
+        <section className="bloco">
+          {d && <p className="aviso">Esta é uma nova localização, feita depois do diagnóstico de {fmtData(d.coletado_em)}. Confirme o que mudou — site, perfil ou ficha — e a coleta roda de novo em cima disso.</p>}
+          <Candidatos key={p.atualizado_em} p={p} ocupado={ocupado} aoConfirmar={(dados) => agir(async () => { await confirmarProspect(p.id, dados); return coletarProspect(p.id); })} />
+        </section>
       )}
 
       {d && (
