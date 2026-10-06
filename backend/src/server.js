@@ -21,6 +21,8 @@ const comercial = require('./rotas/comercial');
 app.use('/api', comercial);
 app.use('/api', require('./rotas/criativos'));
 app.use('/api', require('./rotas/prospeccao'));
+// Conexão MCP (fora de /api de propósito: é outra porta de entrada, para o Claude da equipe, só leitura)
+app.use(require('./rotas/mcp'));
 
 app.use((req, res) => res.status(404).json({ erro: 'rota não encontrada' }));
 
