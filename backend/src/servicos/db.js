@@ -103,6 +103,14 @@ async function migrar() {
     ALTER TABLE leads_comercial ADD COLUMN IF NOT EXISTS falhas JSONB;
     -- quem é o contato: só lead_comercial entra na auditoria de vendas (transportadora, pós-venda e fornecedor não são venda)
     ALTER TABLE leads_comercial ADD COLUMN IF NOT EXISTS tipo_contato TEXT;
+    -- Identidade do anúncio de onde o lead clicou. A coluna "anuncio" acima guarda o TEXTO do criativo,
+    -- que serve para ler mas não cruza com nada. "anuncio_id" é o id do anúncio no Meta: é com ele que
+    -- se liga o lead ao anúncio e se chega em custo por lead por anúncio.
+    ALTER TABLE leads_comercial ADD COLUMN IF NOT EXISTS anuncio_id TEXT;
+    ALTER TABLE leads_comercial ADD COLUMN IF NOT EXISTS anuncio_ctwa_clid TEXT; -- identificador que o Meta usa na atribuição
+    ALTER TABLE leads_comercial ADD COLUMN IF NOT EXISTS anuncio_url TEXT;       -- post/criativo de onde veio o clique
+    ALTER TABLE leads_comercial ADD COLUMN IF NOT EXISTS anuncio_fonte TEXT;     -- ex.: FB_Ads
+    CREATE INDEX IF NOT EXISTS leads_comercial_anuncio_id ON leads_comercial (cliente_id, anuncio_id);
   `);
   // Criativos: contexto -> imagens (n8n) -> aprovação -> copy (n8n) -> escolha -> arte (cockpit, template HTML).
   // Arquivos (fotos, imagens, artes) ficam no Postgres: o volume do Railway não persiste.

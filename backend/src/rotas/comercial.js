@@ -163,14 +163,24 @@ router.get('/clientes/:id/comercial', async (req, res) => {
     const organico = comerciais.filter((l) => l.origem !== 'anuncio');
 
     // Uma linha por anúncio: o que a Feeling é cobrada.
+    // Agrupa pelo ID do anúncio no Meta, não pelo texto do criativo: o texto é só para ler, e dois
+    // anúncios com a mesma legenda cairiam na mesma linha. Com o id, a linha casa com o anúncio no
+    // Meta e dá para chegar em custo por lead por anúncio. Lead antigo (antes da captura do id) não
+    // tem id e continua agrupado pelo texto.
     const porAnuncio = new Map();
     for (const l of anuncio) {
-      const k = (l.anuncio || '').trim();
+      const k = (l.anuncio_id || '').trim() || `texto:${(l.anuncio || '').trim()}`;
       if (!porAnuncio.has(k)) porAnuncio.set(k, []);
       porAnuncio.get(k).push(l);
     }
-    const por_anuncio = [...porAnuncio.entries()]
-      .map(([texto, ls]) => ({ anuncio: texto, ...resumir(ls) }))
+    const por_anuncio = [...porAnuncio.values()]
+      .map((ls) => ({
+        anuncio_id: ls[0].anuncio_id || null,
+        anuncio: (ls[0].anuncio || '').trim(),
+        url: ls[0].anuncio_url || null,
+        fonte: ls[0].anuncio_fonte || null,
+        ...resumir(ls),
+      }))
       .sort((a, b) => b.leads - a.leads);
 
     const alerta = (l) => {
@@ -184,11 +194,36 @@ router.get('/clientes/:id/comercial', async (req, res) => {
       .sort((a, b) => ((a.origem === 'anuncio' ? 0 : 1) - (b.origem === 'anuncio' ? 0 : 1)) || ((b.horas || 0) - (a.horas || 0)))
       .slice(0, 25);
 
+    // ZERO DE ANÚNCIO NÃO É UMA RESPOSTA: significa três coisas diferentes e indistinguíveis — a campanha
+    // não rodou, rodou e não trouxe ninguém, ou rodou e a atribuição falhou. A Trailland ficou com o bloco
+    // zerado de 21/09 a 04/10 porque 6 cliques de anúncio chegaram em mensagem sem corpo de texto e eram
+    // descartados antes de a origem ser gravada; a tela mostrou "0" e ninguém tinha como saber. Agora ela diz.
+    const metaD7 = cliente.comercial?.meta?.d7 || null;
+    let atribuicao = null;
+    if (!anuncio.length) {
+      if (!cliente.conta_id) {
+        atribuicao = { estado: 'nao_medido', texto: 'Este cliente não está ligado à conta de anúncios no Sentinel, então não há como saber se houve verba no período. Zero aqui não quer dizer que não veio lead de anúncio — quer dizer que não foi medido.' };
+      } else if (!metaD7) {
+        atribuicao = { estado: 'nao_medido', texto: 'A conferência com o Meta não trouxe dados na última classificação. Não dá para dizer se houve campanha rodando: rode a classificação de novo antes de concluir qualquer coisa.' };
+      } else if (Number(metaD7.gasto) > 0) {
+        atribuicao = {
+          estado: 'divergencia',
+          texto: `O Meta registra R$ ${metaD7.gasto} de gasto e ${metaD7.conversas_meta ?? 'não sei quantas'} conversas iniciadas por anúncio nos últimos 7 dias (coleta de ${metaD7.coleta}). Nenhum lead do WhatsApp trouxe a marca de anúncio: isto é falha de atribuição, não ausência de lead.`,
+          meta: metaD7,
+        };
+      } else {
+        atribuicao = { estado: 'sem_campanha', texto: `O Meta registra R$ 0 de gasto nos últimos 7 dias (coleta de ${metaD7.coleta}): nenhuma campanha rodou. Zero leads de anúncio é o resultado esperado.`, meta: metaD7 };
+      }
+      // A janela do Meta é rolante de 7 dias e não bate com o período escolhido na tela: dizer isso é
+      // mais honesto que deixar a pessoa comparar dois recortes diferentes achando que são o mesmo.
+      if (janela.periodo !== '7d') atribuicao.ressalva = `Os números do Meta acima são dos últimos 7 dias, não de "${janela.rotulo}".`;
+    }
+
     res.json({
       ativo: true,
       periodo: janela,
       classificacao: { ...cliente.comercial, total_leads_tabela: total_geral },
-      anuncio: { ...resumir(anuncio), interesses: contar(anuncio, 'interesse'), objecoes: contar(anuncio, 'objecao'), auditoria: auditar(anuncio) },
+      anuncio: { ...resumir(anuncio), interesses: contar(anuncio, 'interesse'), objecoes: contar(anuncio, 'objecao'), auditoria: auditar(anuncio), atribuicao },
       organico: { ...resumir(organico), interesses: contar(organico, 'interesse'), objecoes: contar(organico, 'objecao') },
       todos: resumir(comerciais),
       auditoria: auditar(comerciais),

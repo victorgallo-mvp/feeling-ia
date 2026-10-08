@@ -218,14 +218,31 @@ export default function Comercial({ clienteId, aoNovoDocumento }) {
       <p className="form-ajuda">Quem chegou clicando num anúncio (marca do Meta na primeira mensagem). É o piso: quem veio por link, QR ou número salvo não leva a marca. Tempos contam só horário comercial (seg–sex 8–18, sáb 8–12).{meta ? ` Meta contou ${meta.conversas_meta ?? '—'} conversas iniciadas no mesmo recorte.` : ''}</p>
       <Kpis r={a} foco />
 
+      {/* Zero de anúncio não é uma resposta: pode ser campanha parada, campanha sem resultado ou
+          atribuição falhando. O backend decide qual dos três é e explica aqui. */}
+      {a.atribuicao && (
+        <p className={`aviso${a.atribuicao.estado === 'divergencia' ? ' aviso-erro' : ''}`}>
+          <strong>
+            {a.atribuicao.estado === 'sem_campanha' ? 'Nenhuma campanha rodou: '
+              : a.atribuicao.estado === 'divergencia' ? 'Falha de atribuição: '
+              : 'Não foi possível conferir: '}
+          </strong>
+          {a.atribuicao.texto}
+          {a.atribuicao.ressalva && <><br /><span className="doc-data">{a.atribuicao.ressalva}</span></>}
+        </p>
+      )}
+
       {dados.por_anuncio.length > 0 && (
         <div className="tabela-rolagem">
           <table className="tabela">
-            <thead><tr><th>Anúncio</th><th>Leads</th><th>Responderam</th><th>Qualif.+</th><th>Agend./Compra</th><th>1º atendente (mediana)</th><th>Esperando</th><th>Nota</th></tr></thead>
+            <thead><tr><th>Anúncio</th><th>Id no Meta</th><th>Leads</th><th>Responderam</th><th>Qualif.+</th><th>Agend./Compra</th><th>1º atendente (mediana)</th><th>Esperando</th><th>Nota</th></tr></thead>
             <tbody>
               {dados.por_anuncio.map((x) => (
-                <tr key={x.anuncio}>
+                <tr key={x.anuncio_id || x.anuncio}>
                   <td className="celula-anuncio">{rotuloAnuncio(x.anuncio)}</td>
+                  {/* o id é o que permite achar o anúncio no Meta e cruzar com o gasto; lead capturado
+                      antes da correção da origem não tem id e fica agrupado pelo texto */}
+                  <td className="doc-data">{x.anuncio_id || 'sem id'}</td>
                   <td>{x.leads}</td><td>{x.responderam}</td><td>{x.qualificados}</td><td>{x.agendaram}</td>
                   <td>{fmtMin(x.tempo_medio_resposta_humana_min)}</td>
                   <td className={x.esperando ? 'texto-erro' : ''}>{x.esperando}</td>
