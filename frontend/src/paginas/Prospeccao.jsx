@@ -36,7 +36,7 @@ export function ListaProspects() {
           <div className="form-grade">
             <div className="form-campo"><label htmlFor="pr-nome">Nome do negócio</label><input {...campo('nome')} required placeholder="ex.: Pastelaria Universal" /></div>
             <div className="form-campo"><label htmlFor="pr-cidade">Cidade</label><input {...campo('cidade')} required placeholder="ex.: Divinópolis - MG" /></div>
-            <div className="form-campo"><label htmlFor="pr-setor">Setor</label><input {...campo('setor')} placeholder="ex.: pastelaria / clínica odontológica" /></div>
+            <div className="form-campo"><label htmlFor="pr-setor">Nicho</label><input {...campo('setor')} placeholder="ex.: pastelaria / clínica odontológica" /></div>
             <div className="form-campo"><label htmlFor="pr-instagram">Instagram <span className="form-opcional">(se souber)</span></label><input {...campo('instagram')} placeholder="@perfil" /></div>
             <div className="form-campo"><label htmlFor="pr-site">Site <span className="form-opcional">(se souber)</span></label><input {...campo('site')} placeholder="www.negocio.com.br" /></div>
           </div>
@@ -269,7 +269,7 @@ export function Prospect() {
             <div className="form-grade">
               <div className="form-campo"><label>Nome</label><input name="nome" defaultValue={p.nome} required /></div>
               <div className="form-campo"><label>Cidade</label><input name="cidade" defaultValue={p.cidade || ''} /></div>
-              <div className="form-campo"><label>Setor</label><input name="setor" defaultValue={p.setor || ''} /></div>
+              <div className="form-campo"><label>Nicho</label><input name="setor" defaultValue={p.setor || ''} /></div>
               <div className="form-campo"><label>Instagram</label><input name="instagram" defaultValue={p.instagram || ''} /></div>
               <div className="form-campo"><label>Site</label><input name="site" defaultValue={p.site || ''} /></div>
             </div>

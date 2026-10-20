@@ -77,7 +77,7 @@ router.post('/clientes/:id/gerar/:tipo', async (req, res) => {
     // fora da trava: eles vêm do Sentinel pela conta, não procuram a empresa pelo nome.
     if (PRECISA_SETOR.includes(tipo) && !String(cliente.setor || '').trim()) {
       return res.status(400).json({
-        erro: `preencha o setor de "${cliente.nome}" antes de gerar este documento. Sem o setor a busca encontra empresa de mesmo nome em outro ramo e o documento sai sobre o negócio errado — foi o que aconteceu com a Aguazul Divinópolis, descrita como distribuidora de água mineral.`,
+        erro: `preencha o nicho de "${cliente.nome}" antes de gerar este documento. Sem o nicho a busca encontra empresa de mesmo nome em outro ramo e o documento sai sobre o negócio errado — foi o que aconteceu com a Aguazul Divinópolis, descrita como distribuidora de água mineral.`,
       });
     }
 

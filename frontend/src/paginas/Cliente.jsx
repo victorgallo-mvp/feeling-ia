@@ -248,7 +248,7 @@ export default function Cliente() {
   const visiveis = filtro === 'todos' ? documentos : documentos.filter((d) => d.tipo === filtro);
   const faltando = [
     !cliente.conta_id && 'ID da conta',
-    !cliente.setor && 'setor',
+    !cliente.setor && 'nicho',
     !cliente.cidade && 'cidade',
     !cliente.perfil && 'perfil',
     !cliente.instagram && !cliente.site && 'Instagram ou site',
@@ -361,7 +361,7 @@ export default function Cliente() {
         ) : (
           <>
             <dl className="ficha">
-              <div><dt>Setor</dt><dd>{cliente.setor || '—'}</dd></div>
+              <div><dt>Nicho</dt><dd>{cliente.setor || '—'}</dd></div>
               <div><dt>Cidade</dt><dd>{cliente.cidade || '—'}</dd></div>
               <div><dt>Abrangência</dt><dd>{ABRANGENCIA[cliente.abrangencia] || 'a IA infere'}</dd></div>
               <div><dt>ID da conta no Sentinel</dt><dd>{cliente.conta_id ? <code>{cliente.conta_id}</code> : '—'}</dd></div>
@@ -430,7 +430,7 @@ export default function Cliente() {
         ) : (
           <label className="opcao">
             <input type="checkbox" checked={extrair} onChange={(e) => setExtrair(e.target.checked)} disabled={enviando} />
-            Sugerir cadastro a partir deste documento (setor, público, concorrentes, diferenciais…)
+            Sugerir cadastro a partir deste documento (nicho, público, concorrentes, diferenciais…)
           </label>
         )}
         {anexo.mensagem && (

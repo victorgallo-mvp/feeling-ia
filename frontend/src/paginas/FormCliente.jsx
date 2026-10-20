@@ -63,7 +63,10 @@ export default function FormCliente({ inicial, rotuloSalvar, aoSalvar, aoCancela
           <input {...campo('nome')} required autoComplete="off" />
         </div>
         <div className="form-campo">
-          <label htmlFor="campo-setor">Setor</label>
+          {/* Na tela chama "nicho", que é como a equipe fala. No banco e na API continua `setor`:
+              renomear a coluna significaria mexer em sete workflows do n8n que a consultam, e eles não
+              estão no git — um descasamento quebraria a geração de documento em silêncio. */}
+          <label htmlFor="campo-setor">Nicho</label>
           <input {...campo('setor')} placeholder="ex.: e-commerce de autopeças" autoComplete="off" />
         </div>
         <div className="form-campo">

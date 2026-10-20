@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { atualizarCliente } from '../api.js';
 
-const CAMPOS = { setor: 'Setor', cidade: 'Cidade', site: 'Site', instagram: 'Instagram', abrangencia: 'Abrangência' };
+const CAMPOS = { setor: 'Nicho', cidade: 'Cidade', site: 'Site', instagram: 'Instagram', abrangencia: 'Abrangência' };
 
 // Uma fonte de sugestões (reunião ou anexo) vira uma lista plana de itens marcáveis.
 export function itensDe(sugestoes) {
@@ -89,7 +89,7 @@ export default function SugestoesCadastro({ fonte, cliente, aoAtualizarCliente, 
         </button>
         <button type="button" className="botao botao-secundario" disabled={ocupado} onClick={descartar}>Descartar</button>
       </div>
-      <p className="form-ajuda">Setor, cidade, site, Instagram e abrangência substituem o valor atual; perfil e orientações recebem as linhas novas no fim. Nada muda sem clicar em aplicar.</p>
+      <p className="form-ajuda">Nicho, cidade, site, Instagram e abrangência substituem o valor atual; perfil e orientações recebem as linhas novas no fim. Nada muda sem clicar em aplicar.</p>
     </div>
   );
 }

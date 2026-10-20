@@ -30,7 +30,7 @@ export default function ListaClientes() {
           <input
             className="busca"
             type="search"
-            placeholder="Buscar por nome, setor ou cidade"
+            placeholder="Buscar por nome, nicho ou cidade"
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
           />
