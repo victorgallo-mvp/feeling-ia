@@ -10,6 +10,10 @@ const { markdownParaPdf } = require('../servicos/pdf');
 const { salvarPdf } = require('../servicos/storage');
 
 const TEMPO_MAXIMO_MIN = 12; // sem callback depois disso, o documento vira "erro"
+// Documentos que identificam o negócio na web e por isso não podem sair sem setor no cadastro.
+// Fora da lista: 'relatorio' e 'interno' — vêm do Sentinel pela conta de anúncio, não procuram a
+// empresa pelo nome, então setor vazio não os faz escrever sobre outro negócio.
+const PRECISA_SETOR = ['pesquisa', 'briefing', 'analise'];
 
 router.get('/tipos', (req, res) => res.json(tiposConfigurados()));
 
@@ -57,10 +61,25 @@ router.post('/clientes/:id/gerar/:tipo', async (req, res) => {
 
   try {
     const { rows } = await pool.query(
-      'SELECT id, nome, conta_id, instagram, site, google_ads_id, COALESCE(whatsapp_ativo, false) AS whatsapp_ativo FROM clientes WHERE id = $1', [id]
+      `SELECT id, nome, conta_id, setor, cidade, perfil, orientacoes, abrangencia, instagram, site, google_ads_id,
+              COALESCE(whatsapp_ativo, false) AS whatsapp_ativo
+         FROM clientes WHERE id = $1`, [id]
     );
     if (!rows.length) return res.status(404).json({ erro: 'cliente não encontrado' });
     const cliente = rows[0];
+
+    // SETOR VAZIO NÃO É UM SETOR PARA ADIVINHAR.
+    // A pesquisa da Aguazul Divinópolis saiu sem setor no cadastro: a busca achou uma distribuidora de
+    // água mineral REAL com o mesmo nome na mesma cidade e escreveu 22 mil caracteres sobre a empresa
+    // errada — a cliente é de piscinas e spas. Não foi invenção, foi identificação equivocada, e é a
+    // mesma falha de "Strike Calçados" x "Strike Nutrition" e "Sport Gym Fitness" x "Sport Fitness".
+    // Documento que identifica o negócio na web não sai sem setor. Relatório e análise interna ficam de
+    // fora da trava: eles vêm do Sentinel pela conta, não procuram a empresa pelo nome.
+    if (PRECISA_SETOR.includes(tipo) && !String(cliente.setor || '').trim()) {
+      return res.status(400).json({
+        erro: `preencha o setor de "${cliente.nome}" antes de gerar este documento. Sem o setor a busca encontra empresa de mesmo nome em outro ramo e o documento sai sobre o negócio errado — foi o que aconteceu com a Aguazul Divinópolis, descrita como distribuidora de água mineral.`,
+      });
+    }
 
     // um por tipo por vez: se já tem um gerando desse tipo, devolve ele
     const emAndamento = await pool.query(
@@ -83,8 +102,14 @@ router.post('/clientes/:id/gerar/:tipo', async (req, res) => {
     const resposta = { ...doc, url_download: `/api/documentos/${doc.id}/download` };
 
     // dispara sem prender a resposta HTTP; o n8n devolve { aceito: true } e chama o callback depois
+    // IDENTIDADE CONFIRMADA, não redescoberta. Antes o payload mandava só o nome e cada workflow ia
+    // procurar a empresa por conta própria — e empresa de mesmo nome em outro ramo passava. Agora o
+    // cockpit manda quem é o negócio, e o workflow trata isso como dado dado, não como ponto de partida
+    // para uma busca de identificação.
     const dados = {
       conta_id: cliente.conta_id, cliente_nome: cliente.nome, cliente_id: cliente.id,
+      setor: cliente.setor, cidade: cliente.cidade, perfil: cliente.perfil,
+      orientacoes: cliente.orientacoes, abrangencia: cliente.abrangencia,
       instagram: cliente.instagram, site: cliente.site, google_ads_id: cliente.google_ads_id,
       whatsapp_ativo: cliente.whatsapp_ativo, // a análise interna inclui o resumo comercial quando houver
       documento_id: doc.id,
